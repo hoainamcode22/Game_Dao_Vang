@@ -1,0 +1,24 @@
+# Unity
+Skybound/[Ll]ibrary/
+Skybound/[Tt]emp/
+Skybound/[Ll]ogs/
+Skybound/[Oo]bj/
+Skybound/[Bb]uild/
+Skybound/[Bb]uilds/
+Skybound/[Mm]emoryCaptures/
+Skybound/UserSettings/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# Generated Unity files
+*.csproj
+*.sln
+*.user
+*.userprefs
+*.pidb
+
+# System files
+.DS_Store
+Thumbs.db
