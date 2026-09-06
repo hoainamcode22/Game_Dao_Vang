@@ -35,6 +35,13 @@ namespace PlatformerGame.UI
         [SerializeField] private TMP_Text coinText;
         [SerializeField] private TMP_Text scoreText;
 
+        [Header("--- HUD Chìa Khóa & Thông báo Stage ---")]
+        [SerializeField] private Image keyIconImage;
+        [SerializeField] private Sprite keyActiveSprite;
+        [SerializeField] private Sprite keyInactiveSprite;
+        [SerializeField] private GameObject bannerContainer;
+        [SerializeField] private TMP_Text bannerText;
+
         [Header("--- Đếm ngược (Countdown) ---")]
         [SerializeField] private TMP_Text countdownText;
         [SerializeField] private GameObject countdownContainer;
@@ -125,6 +132,14 @@ namespace PlatformerGame.UI
                 UpdateScoreHUD(PlatformerGameManager.Instance.Score);
             }
 
+            // Đăng ký sự kiện từ StageManager
+            if (StageManager.Instance != null)
+            {
+                StageManager.Instance.OnKeyStatusChanged += UpdateKeyHUD;
+                StageManager.Instance.OnMessageDisplayed += ShowBannerMessage;
+                UpdateKeyHUD(StageManager.Instance.HasKeyCurrentStage);
+            }
+
             // Đăng ký sự kiện nút bấm ảo Mobile
             SetupMobileButtons();
         }
@@ -147,6 +162,12 @@ namespace PlatformerGame.UI
                 PlatformerGameManager.Instance.OnScoreChanged -= UpdateScoreHUD;
                 PlatformerGameManager.Instance.OnStateChanged -= HandleGameStateChanged;
                 PlatformerGameManager.Instance.OnCountdownTick -= ShowCountdownTick;
+            }
+
+            if (StageManager.Instance != null)
+            {
+                StageManager.Instance.OnKeyStatusChanged -= UpdateKeyHUD;
+                StageManager.Instance.OnMessageDisplayed -= ShowBannerMessage;
             }
         }
 
@@ -213,6 +234,51 @@ namespace PlatformerGame.UI
             {
                 scoreText.text = $"SCORE: {score:N0}";
             }
+        }
+
+        #endregion
+
+        #region Key & Banner HUD
+
+        private Coroutine bannerCoroutine;
+
+        public void UpdateKeyHUD(bool hasKey)
+        {
+            if (keyIconImage != null)
+            {
+                if (hasKey)
+                {
+                    if (keyActiveSprite != null) keyIconImage.sprite = keyActiveSprite;
+                    keyIconImage.color = Color.white;
+                    keyIconImage.transform.localScale = Vector3.one * 1.2f;
+                }
+                else
+                {
+                    if (keyInactiveSprite != null) keyIconImage.sprite = keyInactiveSprite;
+                    keyIconImage.color = new Color(0.3f, 0.3f, 0.3f, 0.4f);
+                    keyIconImage.transform.localScale = Vector3.one;
+                }
+            }
+        }
+
+        public void ShowBannerMessage(string message)
+        {
+            if (bannerText != null)
+            {
+                bannerText.text = message;
+            }
+            if (bannerContainer != null)
+            {
+                if (bannerCoroutine != null) StopCoroutine(bannerCoroutine);
+                bannerCoroutine = StartCoroutine(BannerRoutine());
+            }
+        }
+
+        private IEnumerator BannerRoutine()
+        {
+            bannerContainer.SetActive(true);
+            yield return new WaitForSeconds(3f);
+            bannerContainer.SetActive(false);
         }
 
         #endregion

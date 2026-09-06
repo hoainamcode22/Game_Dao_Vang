@@ -6,6 +6,7 @@ using UnityEngine.UI;
 using UnityEngine.Tilemaps;
 using UnityEngine.EventSystems;
 using TMPro;
+using UnityEngine.TextCore.LowLevel;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -46,6 +47,11 @@ namespace PlatformerGame.EditorTools
 
         private const string HOME_SCENE_PATH = "Assets/Scenes/Scene_Home.unity";
         private const string ADVENTURE_SCENE_PATH = "Assets/Scenes/Scene_Adventure.unity";
+
+        private const string FONT_TTF_PATH = "Assets/_PlatformerGame/Fredoka.ttf";
+        private const string FONT_ASSET_PATH = "Assets/_PlatformerGame/Fredoka_SDF.asset";
+        private const string TITLE_MAT_PATH = "Assets/_PlatformerGame/Fredoka_Title_Shadow.mat";
+        private const string BUTTON_MAT_PATH = "Assets/_PlatformerGame/Fredoka_Button_Shadow.mat";
 
         private static readonly Color MARIO_SKY_BLUE = new Color(0.45f, 0.76f, 0.98f, 1f);
 
@@ -190,58 +196,186 @@ namespace PlatformerGame.EditorTools
             }
         }
 
-        [MenuItem("Tools/Platformer Game/Paint Sample Ground Platform (Vẽ mẫu ngay 1 bục đất dưới chân)", false, 6)]
-        public static void PaintSamplePlatformUnderPlayer()
+        [MenuItem("Tools/Platformer Game/Fix Tile Scaling (Khít 100% không hở viền - PPU 64)", false, 7)]
+        public static void FixAllSpritesPPU()
         {
-            var groundObj = GameObject.Find("Tilemap_Ground");
-            if (groundObj == null)
+            try
             {
-                EditorUtility.DisplayDialog("Lỗi", "Không tìm thấy GameObject 'Tilemap_Ground' trong Scene!", "OK");
+                EditorUtility.DisplayProgressBar("Tile Scaling Fix", "Đang chuyển đổi PPU 64 cho toàn bộ Sprite...", 0.3f);
+                int count = FixAllSpritesPPUInternal();
+
+                // Tạo lại Tiles và Palette
+                EnsureDirectories();
+                Dictionary<string, Tile> tilesDict = CreateAllTileAssets(out List<Tile> allTilesList);
+                CreatePalettePrefab(allTilesList);
+
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+
+                EditorUtility.DisplayDialog("Thành công!",
+                    $"✅ Đã chuẩn hóa {count} Sprite sang PPU 64 (khít sát 100% ô lưới 1x1)!\n" +
+                    $"✅ Đã làm mới bảng gạch Kenney_Platformer_Palette.\n\n" +
+                    "Bây giờ Sếp vẽ gạch trên Scene sẽ dính liền lạc full khung, không còn khe hở.", "Tuyệt vời");
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        [MenuItem("Tools/Platformer Game/Setup 8 Stages Designer Framework (Dàn dựng 8 Map Tự Vẽ)", false, 8)]
+        public static void Setup8StagesDesignerFramework()
+        {
+            if (!EditorUtility.DisplayDialog("Dàn dựng 8 Map Tự Vẽ",
+                "Hệ thống sẽ tự động cấu hình 8 Khu Vực Màn Chơi (Stage 1 -> Stage 8) với:\n\n" +
+                "1. 8 Checkpoint / Điểm xuất phát của từng Map.\n" +
+                "2. Hệ thống Chìa Khóa & Cửa Lâu Đài mở màn liên hoàn.\n" +
+                "3. Kho máu (Tim hồi máu), Kim cương, Tiền vàng, Lò xo bật nhảy.\n" +
+                "4. HUD hiển thị Chìa Khóa & Tên Stage.\n" +
+                "5. Grid sạch sẽ chuẩn PPU 64 để Sếp tự do vẽ địa hình cho từng map.\n\n" +
+                "Bắt đầu thiết lập?", "Dàn dựng ngay", "Hủy"))
+            {
                 return;
             }
 
-            var tilemap = groundObj.GetComponent<Tilemap>();
-            if (tilemap == null) return;
-
-            var tileLeft = AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_grass_left.asset")
-                        ?? AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_platformPack_tile001.asset");
-            var tileMid = AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_grass_mid.asset")
-                       ?? AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_platformPack_tile002.asset");
-            var tileRight = AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_grass_right.asset")
-                         ?? AssetDatabase.LoadAssetAtPath<Tile>("Assets/_PlatformerGame/Tiles/Tile_platformPack_tile003.asset");
-
-            if (tileMid == null)
+            try
             {
-                string[] guids = AssetDatabase.FindAssets("t:Tile", new[] { "Assets/_PlatformerGame/Tiles" });
-                if (guids.Length > 0)
+                EditorUtility.DisplayProgressBar("8 Stages Setup", "Chuẩn hóa Sprite PPU 64...", 0.1f);
+                FixAllSpritesPPUInternal();
+
+                EditorUtility.DisplayProgressBar("8 Stages Setup", "Đang khởi tạo Scene 8 Màn chơi...", 0.3f);
+                EnsureDirectories();
+                EnsureGroundLayer();
+
+                Dictionary<string, Tile> tilesDict = CreateAllTileAssets(out List<Tile> allTilesList);
+                CreatePalettePrefab(allTilesList);
+
+                Build8StagesScene(tilesDict);
+                BuildHomeScene();
+                UpdateBuildSettings();
+
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+
+                EditorSceneManager.OpenScene(ADVENTURE_SCENE_PATH);
+
+                EditorUtility.DisplayDialog("Dàn dựng 8 Map Hoàn tất!",
+                    "✅ Đã tạo xong khung sườn 8 Map liên hoàn từ Trái sang Phải!\n" +
+                    "✅ Mỗi Map đã có sẵn: Cổng Xuất Phát, Chìa Khóa, Cửa Qua Màn, Tim Máu & Kim Cương.\n" +
+                    "✅ Tỉ lệ gạch đã khít 100%.\n\n" +
+                    "👉 Bây giờ Sếp chỉ việc chọn Tilemap_Ground và vẽ địa hình cho từng Map theo ý muốn. Vẽ xong bấm Play là chơi được luôn!", "Bắt đầu vẽ ngay");
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        [MenuItem("Tools/Platformer Game/Setup 8 Separate Scenes (Tạo 8 Scene Riêng Biệt Stage_1 -> Stage_8)", false, 9)]
+        public static void Setup8SeparateScenes()
+        {
+            if (!EditorUtility.DisplayDialog("Tạo 8 Scene Riêng Biệt",
+                "Hệ thống sẽ tạo 8 file Scene riêng biệt trong thư mục Assets/Scenes/:\n\n" +
+                "- Stage_1.unity -> Stage_8.unity\n" +
+                "- Mỗi Scene độc lập, có sẵn Camera, Player, Grid để Sếp tự vẽ.\n" +
+                "- Cửa ở Stage 1 tự chuyển sang Stage 2, Stage 2 sang Stage 3... đến Stage 8 Chiến Thắng.\n" +
+                "- Tự động đăng ký toàn bộ vào Build Settings.\n\n" +
+                "Bắt đầu tạo?", "Tạo ngay 8 Scene", "Hủy"))
+            {
+                return;
+            }
+
+            try
+            {
+                EditorUtility.DisplayProgressBar("8 Separate Scenes", "Chuẩn hóa Sprite PPU 64...", 0.1f);
+                FixAllSpritesPPUInternal();
+
+                EnsureDirectories();
+                EnsureGroundLayer();
+
+                Dictionary<string, Tile> tilesDict = CreateAllTileAssets(out List<Tile> allTilesList);
+                CreatePalettePrefab(allTilesList);
+
+                string[] stageNames = new string[]
                 {
-                    tileMid = AssetDatabase.LoadAssetAtPath<Tile>(AssetDatabase.GUIDToAssetPath(guids[0]));
+                    "Thung Lũng Cỏ Xanh",
+                    "Hang Đất Nâu & Bục Gỗ",
+                    "Thung Lũng Lò Xo",
+                    "Hẻm Núi Chông Gai",
+                    "Đỉnh Mây Trời",
+                    "Hầm Ngục Cưa Xoay",
+                    "Mê Cung Ống Nước",
+                    "Pháo Đài Tối Thượng"
+                };
+
+                var allScenePaths = new List<string> { HOME_SCENE_PATH };
+
+                for (int i = 1; i <= 8; i++)
+                {
+                    EditorUtility.DisplayProgressBar("8 Separate Scenes", $"Đang tạo Scene Stage_{i}...", 0.2f + (i * 0.08f));
+                    string scenePath = $"Assets/Scenes/Stage_{i}.unity";
+                    string nextSceneName = (i < 8) ? $"Stage_{i + 1}" : "";
+                    BuildSingleStageScene(scenePath, i, stageNames[i - 1], nextSceneName, tilesDict);
+                    allScenePaths.Add(scenePath);
+                }
+
+                BuildHomeScene();
+
+                // Cập nhật Build Settings với đầy đủ 8 scenes
+                var buildScenes = new List<EditorBuildSettingsScene>();
+                foreach (var p in allScenePaths)
+                {
+                    buildScenes.Add(new EditorBuildSettingsScene(p, true));
+                }
+                EditorBuildSettings.scenes = buildScenes.ToArray();
+
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+
+                // Mở Stage_1 để vẽ ngay
+                EditorSceneManager.OpenScene("Assets/Scenes/Stage_1.unity");
+
+                EditorUtility.DisplayDialog("Hoàn tất tạo 8 Scene!",
+                    "✅ Đã tạo thành công 8 file Scene từ Stage_1.unity đến Stage_8.unity trong Assets/Scenes/!\n" +
+                    "✅ Đã đăng ký tất cả vào Build Settings.\n" +
+                    "✅ Đã kết nối Cửa chuyển Scene tự động giữa các Màn.\n\n" +
+                    "👉 Đang mở Stage_1.unity. Sếp chỉ việc chọn Tilemap_Ground và vẽ Map 1, sau đó mở Stage_2 vẽ tiếp!", "Tuyệt vời");
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private static int FixAllSpritesPPUInternal()
+        {
+            string[] pngGuids = AssetDatabase.FindAssets("t:Texture2D", new[] { KENNEY_ROOT });
+            int count = 0;
+            foreach (string guid in pngGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer != null)
+                {
+                    bool changed = false;
+                    if (Mathf.Abs(importer.spritePixelsPerUnit - 64f) > 0.01f)
+                    {
+                        importer.spritePixelsPerUnit = 64f;
+                        changed = true;
+                    }
+                    if (importer.filterMode != FilterMode.Point)
+                    {
+                        importer.filterMode = FilterMode.Point;
+                        changed = true;
+                    }
+                    if (changed)
+                    {
+                        importer.SaveAndReimport();
+                        count++;
+                    }
                 }
             }
-
-            int startX = -3;
-            int endX = 3;
-            int y = -2;
-
-            tilemap.SetTile(new Vector3Int(startX, y, 0), tileLeft != null ? tileLeft : tileMid);
-            for (int x = startX + 1; x < endX; x++)
-            {
-                tilemap.SetTile(new Vector3Int(x, y, 0), tileMid);
-            }
-            tilemap.SetTile(new Vector3Int(endX, y, 0), tileRight != null ? tileRight : tileMid);
-
-            var composite = groundObj.GetComponent<CompositeCollider2D>();
-            if (composite != null)
-            {
-                composite.GenerateGeometry();
-            }
-
-            EditorUtility.SetDirty(tilemap);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
-
-            EditorUtility.DisplayDialog("Đã vẽ bục đất thành công!",
-                "Đã vẽ ngay một đoạn bục đất cỏ 7 ô dưới chân nhân vật!\n\n" +
-                "Bây giờ Sếp có thể bấm Play để nhảy thử ngay, hoặc dùng Cọ vẽ tiếp nối vào bục này!", "Tuyệt vời");
+            return count;
         }
 
         private static void SetupGameInternal(bool isCleanMap)
@@ -665,6 +799,363 @@ namespace PlatformerGame.EditorTools
             Debug.Log($"[PlatformerSetup] Đã lưu Scene_Adventure tại {ADVENTURE_SCENE_PATH}");
         }
 
+        private static void Build8StagesScene(Dictionary<string, Tile> tiles)
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            // 1. Setup Camera với Mario Sky Blue
+            GameObject cameraObj = new GameObject("Main Camera");
+            Camera cam = cameraObj.AddComponent<Camera>();
+            cam.orthographic = true;
+            cam.orthographicSize = 6.0f;
+            cam.backgroundColor = MARIO_SKY_BLUE;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cameraObj.AddComponent<AudioListener>();
+            cameraObj.tag = "MainCamera";
+            cameraObj.transform.position = new Vector3(0f, 2f, -10f);
+
+            CameraFollow2D camFollow = cameraObj.AddComponent<CameraFollow2D>();
+
+            // 2. Setup Grid & 5 Tilemap Layers
+            GameObject gridObj = new GameObject("Grid");
+            Grid grid = gridObj.AddComponent<Grid>();
+            grid.cellSize = new Vector3(1f, 1f, 0f);
+
+            int groundLayer = LayerMask.NameToLayer("Ground");
+            if (groundLayer == -1) groundLayer = LayerMask.NameToLayer("Default");
+
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Background", -10, LayerMask.NameToLayer("Default"), false, false);
+            Tilemap groundTilemap = CreateTilemapLayer(gridObj.transform, "Tilemap_Ground", 0, groundLayer, true, false);
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Platforms", 1, groundLayer, true, false);
+            Tilemap hazardTilemap = CreateTilemapLayer(gridObj.transform, "Tilemap_Hazards", 2, LayerMask.NameToLayer("Default"), true, true);
+            hazardTilemap.gameObject.AddComponent<HazardDamager>();
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Props", 3, LayerMask.NameToLayer("Default"), false, false);
+
+            // 3. Setup Player
+            GameObject playerObj = CreatePlayerObject(groundLayer);
+            playerObj.transform.position = new Vector3(2f, 1.5f, 0f);
+
+            camFollow.SetTarget(playerObj.transform);
+            camFollow.SnapToTarget();
+
+            // 4. Setup Fall Kill Zone rộng suốt 8 map
+            GameObject killZoneObj = new GameObject("FallKillZone");
+            killZoneObj.transform.position = new Vector3(250f, -12f, 0f);
+            BoxCollider2D killBox = killZoneObj.AddComponent<BoxCollider2D>();
+            killBox.isTrigger = true;
+            killBox.size = new Vector2(700f, 4f);
+            killZoneObj.AddComponent<FallKillZone>();
+
+            // 5. Stage Manager
+            GameObject stageMgrObj = new GameObject("StageManager");
+            stageMgrObj.AddComponent<StageManager>();
+
+            // 6. Setup 8 Stage Zones Container
+            GameObject stagesRoot = new GameObject("8_STAGES_FRAMEWORK");
+            string[] stageNames = new string[]
+            {
+                "Stage 1: Thung Lũng Cỏ Xanh",
+                "Stage 2: Hang Đất Nâu & Bục Gỗ",
+                "Stage 3: Thung Lũng Lò Xo",
+                "Stage 4: Hẻm Núi Chông Gai",
+                "Stage 5: Đỉnh Mây Trời",
+                "Stage 6: Hầm Ngục Cưa Xoay",
+                "Stage 7: Mê Cung Ống Nước",
+                "Stage 8: Pháo Đài Tối Thượng"
+            };
+
+            float stageWidth = 65f;
+            StageDoor prevStageDoor = null;
+
+            Tile gLeft = tiles.ContainsKey("grass_left") ? tiles["grass_left"] : (tiles.ContainsKey("tile001") ? tiles["tile001"] : null);
+            Tile gMid = tiles.ContainsKey("grass_mid") ? tiles["grass_mid"] : (tiles.ContainsKey("tile002") ? tiles["tile002"] : null);
+            Tile gRight = tiles.ContainsKey("grass_right") ? tiles["grass_right"] : (tiles.ContainsKey("tile003") ? tiles["tile003"] : null);
+
+            for (int i = 1; i <= 8; i++)
+            {
+                float stageStartX = (i - 1) * stageWidth;
+                GameObject stageZone = new GameObject($"--- [ STAGE {i} - {stageNames[i-1]} ] ---");
+                stageZone.transform.SetParent(stagesRoot.transform);
+
+                // A. Spawn Point
+                GameObject spawnPoint = new GameObject($"Stage{i}_SpawnPoint");
+                spawnPoint.transform.SetParent(stageZone.transform);
+                spawnPoint.transform.position = new Vector3(stageStartX + 2f, 1f, 0f);
+
+                if (prevStageDoor != null)
+                {
+                    prevStageDoor.SetNextSpawnPoint(spawnPoint.transform);
+                }
+
+                // B. Bục xuất phát nhỏ 6 ô đất để không bị rơi lúc vừa vào Stage
+                int startTileX = (int)stageStartX;
+                if (gMid != null)
+                {
+                    for (int x = startTileX; x <= startTileX + 5; x++)
+                    {
+                        Tile t = (x == startTileX) ? (gLeft ?? gMid) : ((x == startTileX + 5) ? (gRight ?? gMid) : gMid);
+                        groundTilemap.SetTile(new Vector3Int(x, -1, 0), t);
+                    }
+                }
+
+                // C. Chìa Khóa (Key Pickup)
+                GameObject keyObj = new GameObject($"Stage{i}_Key");
+                keyObj.transform.SetParent(stageZone.transform);
+                keyObj.transform.position = new Vector3(stageStartX + 25f, 3f, 0f);
+                var keySr = keyObj.AddComponent<SpriteRenderer>();
+                keySr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+                var keyCol = keyObj.AddComponent<CircleCollider2D>();
+                keyCol.radius = 0.5f;
+                keyCol.isTrigger = true;
+                var keyComp = keyObj.AddComponent<KeyPickup>();
+                SetPrivateField(keyComp, "stageIndex", i);
+
+                // D. Kho Máu / Tim hồi máu (Heart Pickup)
+                GameObject heartObj = new GameObject($"Stage{i}_Heart");
+                heartObj.transform.SetParent(stageZone.transform);
+                heartObj.transform.position = new Vector3(stageStartX + 12f, 2.5f, 0f);
+                var heartSr = heartObj.AddComponent<SpriteRenderer>();
+                heartSr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item017.png");
+                var heartCol = heartObj.AddComponent<CircleCollider2D>();
+                heartCol.radius = 0.4f;
+                heartCol.isTrigger = true;
+                heartObj.AddComponent<HeartPickup>();
+
+                // E. Kim Cương thưởng (Gem Pickup)
+                GameObject gemObj = new GameObject($"Stage{i}_Gem");
+                gemObj.transform.SetParent(stageZone.transform);
+                gemObj.transform.position = new Vector3(stageStartX + 38f, 3f, 0f);
+                var gemSr = gemObj.AddComponent<SpriteRenderer>();
+                gemSr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item009.png");
+                var gemCol = gemObj.AddComponent<CircleCollider2D>();
+                gemCol.radius = 0.4f;
+                gemCol.isTrigger = true;
+                gemObj.AddComponent<GemPickup>();
+
+                // F. Lò Xo Bật Nhảy (Spring Pad)
+                if (i >= 3)
+                {
+                    GameObject springObj = new GameObject($"Stage{i}_Spring");
+                    springObj.transform.SetParent(stageZone.transform);
+                    springObj.transform.position = new Vector3(stageStartX + 20f, -0.5f, 0f);
+                    var springSr = springObj.AddComponent<SpriteRenderer>();
+                    springSr.sprite = LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile046.png");
+                    var springCol = springObj.AddComponent<BoxCollider2D>();
+                    springCol.size = new Vector2(0.8f, 0.6f);
+                    springCol.isTrigger = true;
+                    springObj.AddComponent<SpringPad>();
+                }
+
+                // G. Cửa Qua Màn (Stage Door)
+                GameObject doorObj = new GameObject($"Stage{i}_Door");
+                doorObj.transform.SetParent(stageZone.transform);
+                doorObj.transform.position = new Vector3(stageStartX + 55f, 0.5f, 0f);
+                var doorSr = doorObj.AddComponent<SpriteRenderer>();
+                doorSr.sprite = LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile054.png"); // Castle Door Closed
+                var doorCol = doorObj.AddComponent<BoxCollider2D>();
+                doorCol.size = new Vector2(1f, 1.5f);
+                doorCol.isTrigger = true;
+                var doorComp = doorObj.AddComponent<StageDoor>();
+                SetPrivateField(doorComp, "stageIndex", i);
+                SetPrivateField(doorComp, "isFinalVictoryDoor", i == 8);
+                SetPrivateField(doorComp, "closedDoorSprite", doorSr.sprite);
+                SetPrivateField(doorComp, "openDoorSprite", LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile053.png"));
+
+                // Bục đất dưới chân Cửa
+                int doorTileX = (int)doorObj.transform.position.x;
+                if (gMid != null)
+                {
+                    for (int dx = doorTileX - 1; dx <= doorTileX + 1; dx++)
+                    {
+                        groundTilemap.SetTile(new Vector3Int(dx, -1, 0), gMid);
+                    }
+                }
+
+                prevStageDoor = doorComp;
+            }
+
+            // Cập nhật Composite Collider cho Ground
+            var composite = groundTilemap.GetComponent<CompositeCollider2D>();
+            if (composite != null) composite.GenerateGeometry();
+
+            // 7. Setup UI Canvas
+            CreateCanvasWithHUD(playerObj);
+
+            // 8. Setup GameManager
+            GameObject gmObj = new GameObject("[GameManager]");
+            PlatformerGameManager gm = gmObj.AddComponent<PlatformerGameManager>();
+            var playerCtrl = playerObj.GetComponent<PlayerController2D>();
+            SetPrivateField(gm, "player", playerCtrl);
+
+            // 9. Setup EventSystem
+            CreateEventSystem();
+
+            // Save Scene
+            EditorSceneManager.SaveScene(scene, ADVENTURE_SCENE_PATH);
+            Debug.Log($"[PlatformerSetup] Đã lưu Scene 8 Stages tại {ADVENTURE_SCENE_PATH}");
+        }
+
+        private static void BuildSingleStageScene(string scenePath, int stageIndex, string stageTitle, string nextSceneName, Dictionary<string, Tile> tiles)
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            // 1. Camera
+            GameObject cameraObj = new GameObject("Main Camera");
+            Camera cam = cameraObj.AddComponent<Camera>();
+            cam.orthographic = true;
+            cam.orthographicSize = 6.0f;
+            cam.backgroundColor = MARIO_SKY_BLUE;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cameraObj.AddComponent<AudioListener>();
+            cameraObj.tag = "MainCamera";
+            cameraObj.transform.position = new Vector3(0f, 2f, -10f);
+
+            CameraFollow2D camFollow = cameraObj.AddComponent<CameraFollow2D>();
+
+            // 2. Grid & 5 Tilemap Layers
+            GameObject gridObj = new GameObject("Grid");
+            Grid grid = gridObj.AddComponent<Grid>();
+            grid.cellSize = new Vector3(1f, 1f, 0f);
+
+            int groundLayer = LayerMask.NameToLayer("Ground");
+            if (groundLayer == -1) groundLayer = LayerMask.NameToLayer("Default");
+
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Background", -10, LayerMask.NameToLayer("Default"), false, false);
+            Tilemap groundTilemap = CreateTilemapLayer(gridObj.transform, "Tilemap_Ground", 0, groundLayer, true, false);
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Platforms", 1, groundLayer, true, false);
+            Tilemap hazardTilemap = CreateTilemapLayer(gridObj.transform, "Tilemap_Hazards", 2, LayerMask.NameToLayer("Default"), true, true);
+            hazardTilemap.gameObject.AddComponent<HazardDamager>();
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Props", 3, LayerMask.NameToLayer("Default"), false, false);
+
+            // 3. Player
+            GameObject playerObj = CreatePlayerObject(groundLayer);
+            playerObj.transform.position = new Vector3(2f, 1.5f, 0f);
+
+            camFollow.SetTarget(playerObj.transform);
+            camFollow.SnapToTarget();
+
+            // 4. Fall Kill Zone
+            GameObject killZoneObj = new GameObject("FallKillZone");
+            killZoneObj.transform.position = new Vector3(30f, -12f, 0f);
+            BoxCollider2D killBox = killZoneObj.AddComponent<BoxCollider2D>();
+            killBox.isTrigger = true;
+            killBox.size = new Vector2(200f, 4f);
+            killZoneObj.AddComponent<FallKillZone>();
+
+            // 5. Stage Manager
+            GameObject stageMgrObj = new GameObject("StageManager");
+            var sm = stageMgrObj.AddComponent<StageManager>();
+            SetPrivateField(sm, "currentStageIndex", stageIndex);
+
+            // 6. Starting Ground Platform (6 tiles)
+            Tile gLeft = tiles.ContainsKey("grass_left") ? tiles["grass_left"] : (tiles.ContainsKey("tile001") ? tiles["tile001"] : null);
+            Tile gMid = tiles.ContainsKey("grass_mid") ? tiles["grass_mid"] : (tiles.ContainsKey("tile002") ? tiles["tile002"] : null);
+            Tile gRight = tiles.ContainsKey("grass_right") ? tiles["grass_right"] : (tiles.ContainsKey("tile003") ? tiles["tile003"] : null);
+
+            if (gMid != null)
+            {
+                for (int x = 0; x <= 6; x++)
+                {
+                    Tile t = (x == 0) ? (gLeft ?? gMid) : ((x == 6) ? (gRight ?? gMid) : gMid);
+                    groundTilemap.SetTile(new Vector3Int(x, -1, 0), t);
+                }
+            }
+
+            // 7. Interactive Objects: Key, Heart, Gem, Spring, Door
+            GameObject itemsRoot = new GameObject("STAGE_INTERACTIVE_ITEMS");
+
+            // Key
+            GameObject keyObj = new GameObject("Stage_Key");
+            keyObj.transform.SetParent(itemsRoot.transform);
+            keyObj.transform.position = new Vector3(25f, 3f, 0f);
+            var keySr = keyObj.AddComponent<SpriteRenderer>();
+            keySr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+            var keyCol = keyObj.AddComponent<CircleCollider2D>();
+            keyCol.radius = 0.5f;
+            keyCol.isTrigger = true;
+            var keyComp = keyObj.AddComponent<KeyPickup>();
+            SetPrivateField(keyComp, "stageIndex", stageIndex);
+
+            // Heart
+            GameObject heartObj = new GameObject("Stage_Heart");
+            heartObj.transform.SetParent(itemsRoot.transform);
+            heartObj.transform.position = new Vector3(12f, 2.5f, 0f);
+            var heartSr = heartObj.AddComponent<SpriteRenderer>();
+            heartSr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item017.png");
+            var heartCol = heartObj.AddComponent<CircleCollider2D>();
+            heartCol.radius = 0.4f;
+            heartCol.isTrigger = true;
+            heartObj.AddComponent<HeartPickup>();
+
+            // Gem
+            GameObject gemObj = new GameObject("Stage_Gem");
+            gemObj.transform.SetParent(itemsRoot.transform);
+            gemObj.transform.position = new Vector3(38f, 3f, 0f);
+            var gemSr = gemObj.AddComponent<SpriteRenderer>();
+            gemSr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item009.png");
+            var gemCol = gemObj.AddComponent<CircleCollider2D>();
+            gemCol.radius = 0.4f;
+            gemCol.isTrigger = true;
+            gemObj.AddComponent<GemPickup>();
+
+            // Spring
+            if (stageIndex >= 3)
+            {
+                GameObject springObj = new GameObject("Stage_Spring");
+                springObj.transform.SetParent(itemsRoot.transform);
+                springObj.transform.position = new Vector3(20f, -0.5f, 0f);
+                var springSr = springObj.AddComponent<SpriteRenderer>();
+                springSr.sprite = LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile046.png");
+                var springCol = springObj.AddComponent<BoxCollider2D>();
+                springCol.size = new Vector2(0.8f, 0.6f);
+                springCol.isTrigger = true;
+                springObj.AddComponent<SpringPad>();
+            }
+
+            // Door
+            GameObject doorObj = new GameObject("Stage_Door");
+            doorObj.transform.SetParent(itemsRoot.transform);
+            doorObj.transform.position = new Vector3(50f, 0.5f, 0f);
+            var doorSr = doorObj.AddComponent<SpriteRenderer>();
+            doorSr.sprite = LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile054.png");
+            var doorCol = doorObj.AddComponent<BoxCollider2D>();
+            doorCol.size = new Vector2(1f, 1.5f);
+            doorCol.isTrigger = true;
+            var doorComp = doorObj.AddComponent<StageDoor>();
+            SetPrivateField(doorComp, "stageIndex", stageIndex);
+            SetPrivateField(doorComp, "nextSceneName", nextSceneName);
+            SetPrivateField(doorComp, "isFinalVictoryDoor", stageIndex == 8);
+            SetPrivateField(doorComp, "closedDoorSprite", doorSr.sprite);
+            SetPrivateField(doorComp, "openDoorSprite", LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile053.png"));
+
+            // Bục đất dưới chân Cửa
+            if (gMid != null)
+            {
+                for (int dx = 49; dx <= 51; dx++)
+                {
+                    groundTilemap.SetTile(new Vector3Int(dx, -1, 0), gMid);
+                }
+            }
+
+            var composite = groundTilemap.GetComponent<CompositeCollider2D>();
+            if (composite != null) composite.GenerateGeometry();
+
+            // 8. Setup UI Canvas
+            CreateCanvasWithHUD(playerObj);
+
+            // 9. GameManager
+            GameObject gmObj = new GameObject("[GameManager]");
+            PlatformerGameManager gm = gmObj.AddComponent<PlatformerGameManager>();
+            var playerCtrl = playerObj.GetComponent<PlayerController2D>();
+            SetPrivateField(gm, "player", playerCtrl);
+
+            // 10. EventSystem
+            CreateEventSystem();
+
+            EditorSceneManager.SaveScene(scene, scenePath);
+            Debug.Log($"[PlatformerSetup] Đã lưu {scenePath}");
+        }
+
         private static Tilemap CreateTilemapLayer(Transform parent, string name, int sortingOrder, int layer, bool addCollider, bool isTrigger)
         {
             GameObject mapObj = new GameObject(name);
@@ -949,6 +1440,15 @@ namespace PlatformerGame.EditorTools
             PlayerHealth health = player.AddComponent<PlayerHealth>();
             SetPrivateField(health, "spriteRenderer", sr);
 
+            // Visual Animation (Đổi Sprite walk1/walk2 khi bấm A/D, jump khi bấm W, squash & stretch)
+            PlayerVisualAnimator2D visualAnim = player.AddComponent<PlayerVisualAnimator2D>();
+            Sprite charIdle = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_idle.png");
+            Sprite charWalk1 = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_walk1.png");
+            Sprite charWalk2 = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_walk2.png");
+            Sprite charJump = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_jump.png");
+            Sprite charHappy = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_happy.png");
+            visualAnim.SetSprites(charIdle, charWalk1, charWalk2, charJump, charHappy);
+
             return player;
         }
 
@@ -1080,11 +1580,17 @@ namespace PlatformerGame.EditorTools
             coinIconImg.sprite = coinIconSprite;
             coinIconImg.preserveAspect = true;
 
+            TMP_FontAsset gameFont = GetOrCreateGameFontAsset();
+            Material btnMat = GetOrCreateButtonMaterial(gameFont);
+            Material titleMat = GetOrCreateTitleMaterial(gameFont);
+
             // Coin Text
             GameObject coinTextObj = CreateUIElement("Coin_Text", coinContainer.transform);
             RectTransform coinTextRect = coinTextObj.GetComponent<RectTransform>();
             coinTextRect.sizeDelta = new Vector2(120, 60);
             TextMeshProUGUI coinTmp = coinTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) coinTmp.font = gameFont;
+            if (btnMat != null) coinTmp.fontSharedMaterial = btnMat;
             coinTmp.text = "00";
             coinTmp.fontSize = 42;
             coinTmp.fontStyle = FontStyles.Bold;
@@ -1101,11 +1607,55 @@ namespace PlatformerGame.EditorTools
             scoreRect.sizeDelta = new Vector2(400, 60);
 
             TextMeshProUGUI scoreTmp = scoreObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) scoreTmp.font = gameFont;
+            if (btnMat != null) scoreTmp.fontSharedMaterial = btnMat;
             scoreTmp.text = "SCORE: 0";
             scoreTmp.fontSize = 38;
             scoreTmp.fontStyle = FontStyles.Bold;
             scoreTmp.color = Color.white;
             scoreTmp.alignment = TextAlignmentOptions.Center;
+
+            // --- Key HUD (Top Right, next to Coins) ---
+            GameObject keyContainer = CreateUIElement("Key_Container", hudPanel.transform);
+            RectTransform keyRect = keyContainer.GetComponent<RectTransform>();
+            keyRect.anchorMin = new Vector2(1, 0.5f);
+            keyRect.anchorMax = new Vector2(1, 0.5f);
+            keyRect.pivot = new Vector2(1, 0.5f);
+            keyRect.anchoredPosition = new Vector2(-250, 0);
+            keyRect.sizeDelta = new Vector2(50, 50);
+
+            Image keyIconImg = keyContainer.AddComponent<Image>();
+            Sprite keySprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+            keyIconImg.sprite = keySprite;
+            keyIconImg.preserveAspect = true;
+            keyIconImg.color = new Color(0.3f, 0.3f, 0.3f, 0.4f); // Inactive dark initially
+
+            // --- Stage Name / Notification Banner (Top Center) ---
+            GameObject bannerObj = CreateUIElement("Stage_Banner", canvasObj.transform);
+            RectTransform bannerRect = bannerObj.GetComponent<RectTransform>();
+            bannerRect.anchorMin = new Vector2(0.5f, 1f);
+            bannerRect.anchorMax = new Vector2(0.5f, 1f);
+            bannerRect.pivot = new Vector2(0.5f, 1f);
+            bannerRect.anchoredPosition = new Vector2(0, -90);
+            bannerRect.sizeDelta = new Vector2(700, 60);
+
+            Image bannerBg = bannerObj.AddComponent<Image>();
+            bannerBg.color = new Color(0.1f, 0.12f, 0.18f, 0.9f);
+
+            GameObject bannerTextObj = CreateUIElement("Banner_Text", bannerObj.transform);
+            RectTransform btRect = bannerTextObj.GetComponent<RectTransform>();
+            btRect.anchorMin = Vector2.zero;
+            btRect.anchorMax = Vector2.one;
+            btRect.sizeDelta = Vector2.zero;
+            TextMeshProUGUI bannerTmp = bannerTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) bannerTmp.font = gameFont;
+            if (btnMat != null) bannerTmp.fontSharedMaterial = btnMat;
+            bannerTmp.text = "🚩 STAGE 1: THUNG LŨNG CỎ XANH";
+            bannerTmp.fontSize = 28;
+            bannerTmp.fontStyle = FontStyles.Bold;
+            bannerTmp.color = new Color(1f, 0.9f, 0.2f);
+            bannerTmp.alignment = TextAlignmentOptions.Center;
+            bannerObj.SetActive(false);
 
             // 2. Countdown Text (Center Screen)
             GameObject countdownObj = CreateUIElement("Countdown_Text", canvasObj.transform);
@@ -1117,6 +1667,8 @@ namespace PlatformerGame.EditorTools
             countdownRect.sizeDelta = new Vector2(800, 200);
 
             TextMeshProUGUI countdownTmp = countdownObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) countdownTmp.font = gameFont;
+            if (titleMat != null) countdownTmp.fontSharedMaterial = titleMat;
             countdownTmp.text = "3";
             countdownTmp.fontSize = 110;
             countdownTmp.fontStyle = FontStyles.Bold;
@@ -1177,6 +1729,11 @@ namespace PlatformerGame.EditorTools
             SetPrivateField(uiManager, "emptyHeartSprite", emptyHeartSprite);
             SetPrivateField(uiManager, "coinText", coinTmp);
             SetPrivateField(uiManager, "scoreText", scoreTmp);
+            SetPrivateField(uiManager, "keyIconImage", keyIconImg);
+            SetPrivateField(uiManager, "keyActiveSprite", keySprite);
+            SetPrivateField(uiManager, "keyInactiveSprite", keySprite);
+            SetPrivateField(uiManager, "bannerContainer", bannerObj);
+            SetPrivateField(uiManager, "bannerText", bannerTmp);
             SetPrivateField(uiManager, "countdownText", countdownTmp);
             SetPrivateField(uiManager, "countdownContainer", countdownObj);
             SetPrivateField(uiManager, "mobileControlsPanel", mobileControls);
@@ -1229,6 +1786,12 @@ namespace PlatformerGame.EditorTools
             titleRect.anchoredPosition = new Vector2(0, -30);
             titleRect.sizeDelta = new Vector2(550, 70);
             TextMeshProUGUI titleTmp = titleObj.AddComponent<TextMeshProUGUI>();
+            TMP_FontAsset gameFont = GetOrCreateGameFontAsset();
+            Material titleMat = GetOrCreateTitleMaterial(gameFont);
+            Material btnMat = GetOrCreateButtonMaterial(gameFont);
+
+            if (gameFont != null) titleTmp.font = gameFont;
+            if (titleMat != null) titleTmp.fontSharedMaterial = titleMat;
             titleTmp.text = titleText;
             titleTmp.fontSize = 52;
             titleTmp.fontStyle = FontStyles.Bold;
@@ -1244,6 +1807,8 @@ namespace PlatformerGame.EditorTools
             scoreRect.anchoredPosition = new Vector2(0, 45);
             scoreRect.sizeDelta = new Vector2(500, 50);
             TextMeshProUGUI scoreTmp = scoreObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) scoreTmp.font = gameFont;
+            if (btnMat != null) scoreTmp.fontSharedMaterial = btnMat;
             scoreTmp.text = "SCORE: 0";
             scoreTmp.fontSize = 38;
             scoreTmp.color = Color.white;
@@ -1259,6 +1824,8 @@ namespace PlatformerGame.EditorTools
             coinRect.anchoredPosition = new Vector2(0, -15);
             coinRect.sizeDelta = new Vector2(500, 50);
             TextMeshProUGUI coinTmp = coinObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) coinTmp.font = gameFont;
+            if (btnMat != null) coinTmp.fontSharedMaterial = btnMat;
             coinTmp.text = "COINS: 0";
             coinTmp.fontSize = 34;
             coinTmp.color = new Color(1f, 0.85f, 0.2f);
@@ -1291,6 +1858,139 @@ namespace PlatformerGame.EditorTools
             return modal;
         }
 
+        public static TMP_FontAsset GetOrCreateGameFontAsset()
+        {
+            TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FONT_ASSET_PATH);
+            if (fontAsset != null && fontAsset.material != null && fontAsset.atlasTexture != null)
+            {
+                return fontAsset;
+            }
+
+            Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(FONT_TTF_PATH);
+            if (sourceFont != null)
+            {
+                try
+                {
+                    if (fontAsset != null)
+                    {
+                        AssetDatabase.DeleteAsset(FONT_ASSET_PATH);
+                    }
+
+                    fontAsset = TMP_FontAsset.CreateFontAsset(sourceFont, 64, 4, GlyphRenderMode.SDFAA, 512, 512, AtlasPopulationMode.Dynamic);
+                    if (fontAsset != null)
+                    {
+                        AssetDatabase.CreateAsset(fontAsset, FONT_ASSET_PATH);
+
+                        // Nhúng Material và Atlas Texture vào bên trong Asset để không bị Unity giải phóng (destroyed)
+                        if (fontAsset.material != null)
+                        {
+                            fontAsset.material.name = fontAsset.name + " Material";
+                            AssetDatabase.AddObjectToAsset(fontAsset.material, fontAsset);
+                        }
+
+                        if (fontAsset.atlasTextures != null)
+                        {
+                            for (int i = 0; i < fontAsset.atlasTextures.Length; i++)
+                            {
+                                var tex = fontAsset.atlasTextures[i];
+                                if (tex != null)
+                                {
+                                    tex.name = $"{fontAsset.name} Atlas {i}";
+                                    AssetDatabase.AddObjectToAsset(tex, fontAsset);
+                                }
+                            }
+                        }
+
+                        AssetDatabase.SaveAssets();
+                        AssetDatabase.ImportAsset(FONT_ASSET_PATH, ImportAssetOptions.ForceUpdate);
+                        return fontAsset;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[FontSetup] Không thể tạo FontAsset từ TTF: {ex.Message}");
+                }
+            }
+
+            return Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        }
+
+        public static Material GetOrCreateTitleMaterial(TMP_FontAsset fontAsset)
+        {
+            if (fontAsset == null || fontAsset.material == null) return null;
+
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(TITLE_MAT_PATH);
+            if (mat != null && mat.mainTexture != null) return mat;
+
+            try
+            {
+                if (mat != null) AssetDatabase.DeleteAsset(TITLE_MAT_PATH);
+
+                mat = new Material(fontAsset.material);
+                mat.name = "Fredoka_Title_Shadow";
+
+                // Bật Underlay (Đổ bóng 3D màu nâu cam đậm chuẩn hoạt hình)
+                mat.EnableKeyword("UNDERLAY_ON");
+                mat.SetColor("_UnderlayColor", new Color(0.55f, 0.22f, 0.02f, 0.95f)); // #8C3805
+                mat.SetFloat("_UnderlayOffsetX", 0f);
+                mat.SetFloat("_UnderlayOffsetY", -0.75f);
+                mat.SetFloat("_UnderlayDilate", 0.22f);
+                mat.SetFloat("_UnderlaySoftness", 0.08f);
+
+                // Viền chữ (Outline)
+                mat.EnableKeyword("OUTLINE_ON");
+                mat.SetColor("_OutlineColor", new Color(0.85f, 0.48f, 0.05f, 1f));
+                mat.SetFloat("_OutlineWidth", 0.16f);
+
+                AssetDatabase.CreateAsset(mat, TITLE_MAT_PATH);
+                AssetDatabase.SaveAssets();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[TitleMaterial] {ex.Message}");
+            }
+
+            return mat;
+        }
+
+        public static Material GetOrCreateButtonMaterial(TMP_FontAsset fontAsset)
+        {
+            if (fontAsset == null || fontAsset.material == null) return null;
+
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(BUTTON_MAT_PATH);
+            if (mat != null && mat.mainTexture != null) return mat;
+
+            try
+            {
+                if (mat != null) AssetDatabase.DeleteAsset(BUTTON_MAT_PATH);
+
+                mat = new Material(fontAsset.material);
+                mat.name = "Fredoka_Button_Shadow";
+
+                // Đổ bóng chữ nút
+                mat.EnableKeyword("UNDERLAY_ON");
+                mat.SetColor("_UnderlayColor", new Color(0.04f, 0.08f, 0.15f, 0.85f));
+                mat.SetFloat("_UnderlayOffsetX", 0f);
+                mat.SetFloat("_UnderlayOffsetY", -0.65f);
+                mat.SetFloat("_UnderlayDilate", 0.15f);
+                mat.SetFloat("_UnderlaySoftness", 0.05f);
+
+                // Viền chữ
+                mat.EnableKeyword("OUTLINE_ON");
+                mat.SetColor("_OutlineColor", new Color(0.1f, 0.15f, 0.22f, 1f));
+                mat.SetFloat("_OutlineWidth", 0.12f);
+
+                AssetDatabase.CreateAsset(mat, BUTTON_MAT_PATH);
+                AssetDatabase.SaveAssets();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[ButtonMaterial] {ex.Message}");
+            }
+
+            return mat;
+        }
+
         private static GameObject CreateUIButton(string name, Transform parent, string label, Vector2 size, Color bgColor, float fontSize = 28)
         {
             GameObject btnObj = CreateUIElement(name, parent);
@@ -1313,6 +2013,14 @@ namespace PlatformerGame.EditorTools
             textRect.sizeDelta = Vector2.zero;
 
             TextMeshProUGUI tmp = textObj.AddComponent<TextMeshProUGUI>();
+            TMP_FontAsset fontAsset = GetOrCreateGameFontAsset();
+            if (fontAsset != null)
+            {
+                tmp.font = fontAsset;
+                Material btnMat = GetOrCreateButtonMaterial(fontAsset);
+                if (btnMat != null) tmp.fontSharedMaterial = btnMat;
+            }
+
             tmp.text = label;
             tmp.fontSize = fontSize;
             tmp.fontStyle = FontStyles.Bold;
@@ -1364,21 +2072,104 @@ namespace PlatformerGame.EditorTools
 
         #region Step 4: Build Home Scene
 
+        [MenuItem("Tools/Platformer Game/Setup Home Menu (Tạo Scene_Home Đẹp Kèm Grid Tự Vẽ)", false, 10)]
+        public static void BuildHomeSceneMenu()
+        {
+            EnsureDirectories();
+            Dictionary<string, Tile> tilesDict = CreateAllTileAssets(out List<Tile> allTilesList);
+            CreatePalettePrefab(allTilesList);
+            BuildHomeScene();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorSceneManager.OpenScene(HOME_SCENE_PATH);
+            EditorUtility.DisplayDialog("Thành công", "Đã tạo Scene_Home với Grid 5 lớp Tilemap và Giao diện Menu theo đúng ảnh mẫu!\n\nBây giờ Sếp có thể dùng Tile Palette để vẽ thêm cỏ cây, bục quà trang trí cho Home.", "Tuyệt vời");
+        }
+
         private static void BuildHomeScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // Camera
+            // 1. Camera Sky Blue
             GameObject cameraObj = new GameObject("Main Camera");
             Camera cam = cameraObj.AddComponent<Camera>();
             cam.orthographic = true;
-            cam.orthographicSize = 5f;
-            cam.backgroundColor = new Color(0.15f, 0.2f, 0.32f);
+            cam.orthographicSize = 6f;
+            cam.backgroundColor = MARIO_SKY_BLUE;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cameraObj.AddComponent<AudioListener>();
             cameraObj.tag = "MainCamera";
+            cameraObj.transform.position = new Vector3(0f, 1f, -10f);
 
-            // Canvas
+            // 2. Grid & 5 Tilemap Layers (để tự vẽ địa hình, cây cỏ, hộp quà trang trí cho Home)
+            GameObject gridObj = new GameObject("Grid");
+            Grid grid = gridObj.AddComponent<Grid>();
+            grid.cellSize = new Vector3(1f, 1f, 0f);
+
+            int groundLayer = LayerMask.NameToLayer("Ground");
+            if (groundLayer == -1) groundLayer = LayerMask.NameToLayer("Default");
+
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Background", -10, LayerMask.NameToLayer("Default"), false, false);
+            Tilemap groundTilemap = CreateTilemapLayer(gridObj.transform, "Tilemap_Ground", 0, groundLayer, false, false);
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Platforms", 1, groundLayer, false, false);
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Hazards", 2, LayerMask.NameToLayer("Default"), false, false);
+            CreateTilemapLayer(gridObj.transform, "Tilemap_Props", 3, LayerMask.NameToLayer("Default"), false, false);
+
+            // Vẽ mẫu 1 hàng đất cỏ phía dưới màn hình Home (từ X: -15 đến 15, Y: -4)
+            Tile gLeft = AssetDatabase.LoadAssetAtPath<Tile>($"{TILES_DIR}/Tile_grass_left.asset");
+            Tile gMid = AssetDatabase.LoadAssetAtPath<Tile>($"{TILES_DIR}/Tile_grass_mid.asset");
+            Tile gRight = AssetDatabase.LoadAssetAtPath<Tile>($"{TILES_DIR}/Tile_grass_right.asset");
+            Tile dirtMid = AssetDatabase.LoadAssetAtPath<Tile>($"{TILES_DIR}/Tile_dirt_mid.asset");
+
+            if (gMid != null)
+            {
+                for (int x = -15; x <= 15; x++)
+                {
+                    groundTilemap.SetTile(new Vector3Int(x, -4, 0), gMid);
+                    if (dirtMid != null)
+                    {
+                        groundTilemap.SetTile(new Vector3Int(x, -5, 0), dirtMid);
+                        groundTilemap.SetTile(new Vector3Int(x, -6, 0), dirtMid);
+                    }
+                }
+            }
+
+            // 2.5. Nhân vật trang trí tự động chạy nhảy, nhún nhảy trên nền đất Home
+            Sprite charIdle = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_idle.png");
+            Sprite charHappy = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_happy.png");
+            Sprite charWalk1 = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_walk1.png");
+            Sprite charWalk2 = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_walk2.png");
+            Sprite charJump = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_jump.png");
+
+            if (charIdle != null || charHappy != null)
+            {
+                GameObject charsRoot = new GameObject("Home_Characters");
+
+                // Nhân vật bên trái (tự động chạy tuần tra bên trái và bật nhảy tung tăng)
+                GameObject charLeft = new GameObject("Char_Left_Runner");
+                charLeft.transform.SetParent(charsRoot.transform);
+                charLeft.transform.position = new Vector3(-5f, -3.2f, 0f);
+                var srLeft = charLeft.AddComponent<SpriteRenderer>();
+                srLeft.sprite = charHappy ?? charIdle;
+                srLeft.sortingOrder = 5;
+
+                var animLeft = charLeft.AddComponent<HomeCharacterAnimator>();
+                animLeft.SetSprites(charIdle, charWalk1, charWalk2, charJump, charHappy);
+                animLeft.SetupPatrolBounds(min: -8.5f, max: -2f, speed: 2.3f, scale: 1.35f, jump: true);
+
+                // Nhân vật bên phải (tự động chạy tuần tra bên phải và bật nhảy nhún nhảy)
+                GameObject charRight = new GameObject("Char_Right_Jumper");
+                charRight.transform.SetParent(charsRoot.transform);
+                charRight.transform.position = new Vector3(5f, -3.2f, 0f);
+                var srRight = charRight.AddComponent<SpriteRenderer>();
+                srRight.sprite = charIdle ?? charHappy;
+                srRight.sortingOrder = 5;
+
+                var animRight = charRight.AddComponent<HomeCharacterAnimator>();
+                animRight.SetSprites(charIdle, charWalk1, charWalk2, charJump, charHappy);
+                animRight.SetupPatrolBounds(min: 2f, max: 8.5f, speed: 2.6f, scale: 1.35f, jump: true);
+            }
+
+            // 3. UI Canvas
             GameObject canvasObj = new GameObject("UI_Canvas");
             Canvas canvas = canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -1391,64 +2182,100 @@ namespace PlatformerGame.EditorTools
             canvasObj.AddComponent<GraphicRaycaster>();
             HomeSceneController homeCtrl = canvasObj.AddComponent<HomeSceneController>();
 
-            // Title Container
+            TMP_FontAsset gameFont = GetOrCreateGameFontAsset();
+            Material titleMat = GetOrCreateTitleMaterial(gameFont);
+            Material btnMat = GetOrCreateButtonMaterial(gameFont);
+
+            // --- Top Bar (Pill Info: Gems & Hearts - Top Left) ---
+            GameObject topPill = CreateUIElement("Top_Info_Pill", canvasObj.transform);
+            RectTransform pillRect = topPill.GetComponent<RectTransform>();
+            pillRect.anchorMin = new Vector2(0, 1);
+            pillRect.anchorMax = new Vector2(0, 1);
+            pillRect.pivot = new Vector2(0, 1);
+            pillRect.anchoredPosition = new Vector2(60, -50);
+            pillRect.sizeDelta = new Vector2(280, 70);
+
+            Image pillBg = topPill.AddComponent<Image>();
+            pillBg.color = new Color(0.12f, 0.18f, 0.28f, 0.9f);
+
+            GameObject pillTextObj = CreateUIElement("Pill_Text", topPill.transform);
+            RectTransform ptRect = pillTextObj.GetComponent<RectTransform>();
+            ptRect.anchorMin = Vector2.zero;
+            ptRect.anchorMax = Vector2.one;
+            ptRect.sizeDelta = Vector2.zero;
+            TextMeshProUGUI ptTmp = pillTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) ptTmp.font = gameFont;
+            if (btnMat != null) ptTmp.fontSharedMaterial = btnMat;
+            ptTmp.text = "💎 128   ❤️ 5";
+            ptTmp.fontSize = 28;
+            ptTmp.fontStyle = FontStyles.Bold;
+            ptTmp.color = Color.white;
+            ptTmp.alignment = TextAlignmentOptions.Center;
+
+            // --- Top Right Settings & Audio Icons ---
+            GameObject settingsBtnObj = CreateUIButton("Btn_Settings", canvasObj.transform, "⚙", new Vector2(65, 65), new Color(0.18f, 0.24f, 0.35f, 0.9f), 30);
+            RectTransform sRect = settingsBtnObj.GetComponent<RectTransform>();
+            sRect.anchorMin = new Vector2(1, 1);
+            sRect.anchorMax = new Vector2(1, 1);
+            sRect.pivot = new Vector2(1, 1);
+            sRect.anchoredPosition = new Vector2(-140, -50);
+
+            GameObject audioBtnObj = CreateUIButton("Btn_Audio", canvasObj.transform, "♪", new Vector2(65, 65), new Color(0.18f, 0.24f, 0.35f, 0.9f), 30);
+            RectTransform aRect = audioBtnObj.GetComponent<RectTransform>();
+            aRect.anchorMin = new Vector2(1, 1);
+            aRect.anchorMax = new Vector2(1, 1);
+            aRect.pivot = new Vector2(1, 1);
+            aRect.anchoredPosition = new Vector2(-60, -50);
+
+            // --- Main Title: SUPER SKYBOUND (Đổ bóng 3D vàng cam chuẩn phong cách) ---
             GameObject titleObj = CreateUIElement("Title_Game", canvasObj.transform);
             RectTransform titleRect = titleObj.GetComponent<RectTransform>();
-            titleRect.anchorMin = new Vector2(0.5f, 0.7f);
-            titleRect.anchorMax = new Vector2(0.5f, 0.7f);
+            titleRect.anchorMin = new Vector2(0.5f, 0.74f);
+            titleRect.anchorMax = new Vector2(0.5f, 0.74f);
             titleRect.pivot = new Vector2(0.5f, 0.5f);
             titleRect.anchoredPosition = Vector2.zero;
-            titleRect.sizeDelta = new Vector2(1000, 150);
+            titleRect.sizeDelta = new Vector2(1000, 180);
 
             TextMeshProUGUI titleTmp = titleObj.AddComponent<TextMeshProUGUI>();
-            titleTmp.text = "SUPER SKYBOUND\nPLATFORMER 2D";
-            titleTmp.fontSize = 72;
+            if (gameFont != null) titleTmp.font = gameFont;
+            if (titleMat != null) titleTmp.fontSharedMaterial = titleMat;
+            titleTmp.text = "SUPER\nSKYBOUND";
+            titleTmp.fontSize = 88;
+            titleTmp.lineSpacing = -15f;
+            titleTmp.characterSpacing = 3f;
             titleTmp.fontStyle = FontStyles.Bold;
-            titleTmp.color = new Color(1f, 0.85f, 0.2f);
+            titleTmp.color = new Color(1f, 0.82f, 0.18f); // Golden Yellow #FFD12E
             titleTmp.alignment = TextAlignmentOptions.Center;
 
-            // Character Icon Preview
-            Sprite charSprite = LoadSprite($"{KENNEY_CHARS_DIR}/platformChar_idle.png");
-            if (charSprite != null)
-            {
-                GameObject charIconObj = CreateUIElement("Char_Preview", canvasObj.transform);
-                RectTransform cr = charIconObj.GetComponent<RectTransform>();
-                cr.anchorMin = new Vector2(0.5f, 0.48f);
-                cr.anchorMax = new Vector2(0.5f, 0.48f);
-                cr.pivot = new Vector2(0.5f, 0.5f);
-                cr.anchoredPosition = Vector2.zero;
-                cr.sizeDelta = new Vector2(120, 120);
-
-                Image charImg = charIconObj.AddComponent<Image>();
-                charImg.sprite = charSprite;
-                charImg.preserveAspect = true;
-            }
-
-            // Buttons Container
-            GameObject btnGroup = CreateUIElement("Menu_Buttons", canvasObj.transform);
-            RectTransform bgRect = btnGroup.GetComponent<RectTransform>();
-            bgRect.anchorMin = new Vector2(0.5f, 0.25f);
-            bgRect.anchorMax = new Vector2(0.5f, 0.25f);
-            bgRect.pivot = new Vector2(0.5f, 0.5f);
-            bgRect.anchoredPosition = Vector2.zero;
-            bgRect.sizeDelta = new Vector2(400, 220);
-
-            VerticalLayoutGroup vLayout = btnGroup.AddComponent<VerticalLayoutGroup>();
-            vLayout.spacing = 25;
-            vLayout.childAlignment = TextAnchor.MiddleCenter;
-            vLayout.childControlWidth = false;
-            vLayout.childControlHeight = false;
-
-            // Play Button
-            GameObject playBtnObj = CreateUIButton("Btn_PlayAdventure", btnGroup.transform, "CHƠI PHIÊU LƯU", new Vector2(380, 85), new Color(0.18f, 0.68f, 0.28f), 36);
+            // --- Nút CHƠI PHIÊU LƯU (Xanh lá to, căn giữa) ---
+            GameObject playBtnObj = CreateUIButton("Btn_PlayAdventure", canvasObj.transform, "▶ CHƠI PHIÊU LƯU", new Vector2(440, 92), new Color(0.18f, 0.68f, 0.28f), 34);
+            RectTransform pbr = playBtnObj.GetComponent<RectTransform>();
+            pbr.anchorMin = new Vector2(0.5f, 0.44f);
+            pbr.anchorMax = new Vector2(0.5f, 0.44f);
+            pbr.pivot = new Vector2(0.5f, 0.5f);
+            pbr.anchoredPosition = Vector2.zero;
             Button playBtn = playBtnObj.GetComponent<Button>();
 
-            // Quit Button
-            GameObject quitBtnObj = CreateUIButton("Btn_Quit", btnGroup.transform, "THOÁT GAME", new Vector2(380, 85), new Color(0.8f, 0.25f, 0.25f), 34);
+            // --- Nút CHỌN MÀN (Xám đậm, bên trái) ---
+            GameObject selectBtnObj = CreateUIButton("Btn_SelectStage", canvasObj.transform, "CHỌN MÀN", new Vector2(210, 75), new Color(0.24f, 0.32f, 0.42f), 26);
+            RectTransform sbr = selectBtnObj.GetComponent<RectTransform>();
+            sbr.anchorMin = new Vector2(0.5f, 0.31f);
+            sbr.anchorMax = new Vector2(0.5f, 0.31f);
+            sbr.pivot = new Vector2(0.5f, 0.5f);
+            sbr.anchoredPosition = new Vector2(-115, 0);
+
+            // --- Nút THOÁT GAME (Đỏ, bên phải) ---
+            GameObject quitBtnObj = CreateUIButton("Btn_Quit", canvasObj.transform, "THOÁT GAME", new Vector2(210, 75), new Color(0.82f, 0.24f, 0.24f), 26);
+            RectTransform qbr = quitBtnObj.GetComponent<RectTransform>();
+            qbr.anchorMin = new Vector2(0.5f, 0.31f);
+            qbr.anchorMax = new Vector2(0.5f, 0.31f);
+            qbr.pivot = new Vector2(0.5f, 0.5f);
+            qbr.anchoredPosition = new Vector2(115, 0);
             Button quitBtn = quitBtnObj.GetComponent<Button>();
 
             SetPrivateField(homeCtrl, "playButton", playBtn);
             SetPrivateField(homeCtrl, "quitButton", quitBtn);
+            SetPrivateField(homeCtrl, "adventureSceneName", "Stage_1");
 
             CreateEventSystem();
 

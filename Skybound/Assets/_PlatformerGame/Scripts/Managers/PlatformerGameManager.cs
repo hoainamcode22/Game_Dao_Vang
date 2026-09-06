@@ -152,6 +152,11 @@ namespace PlatformerGame.Managers
             }
         }
 
+        public void TriggerVictory()
+        {
+            SetVictory();
+        }
+
         private void SetState(GameState newState)
         {
             currentState = newState;
