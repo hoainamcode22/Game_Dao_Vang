@@ -40,17 +40,20 @@ namespace PlatformerGame.Managers
         [Header("--- Trạng thái hiện tại (Runtime Data) ---")]
         [SerializeField] private GameState currentState = GameState.Countdown;
         [SerializeField] private int coinsCollected = 0;
+        [SerializeField] private int gemsCollected = 0;
         [SerializeField] private int score = 0;
         [SerializeField] private float startPlayerX;
 
         // Events
         public event Action<GameState> OnStateChanged;
         public event Action<int> OnCoinChanged;
+        public event Action<int> OnGemChanged;
         public event Action<int> OnScoreChanged;
         public event Action<string> OnCountdownTick; // "3", "2", "1", "READY GO!", ""
 
         public GameState CurrentState => currentState;
         public int CoinsCollected => coinsCollected;
+        public int GemsCollected => gemsCollected;
         public int Score => score;
         public PlayerController2D Player => player;
 
@@ -174,6 +177,15 @@ namespace PlatformerGame.Managers
         {
             coinsCollected += amount;
             OnCoinChanged?.Invoke(coinsCollected);
+        }
+
+        /// <summary>
+        /// Thêm số Kim Cương (Gem) thu thập được
+        /// </summary>
+        public void AddGem(int amount = 1)
+        {
+            gemsCollected += amount;
+            OnGemChanged?.Invoke(gemsCollected);
         }
 
         #endregion

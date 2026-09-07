@@ -15,10 +15,10 @@ namespace PlatformerGame.UI
     /// - Hiển thị điểm / khoảng cách
     /// - Đếm ngược 3, 2, 1, READY GO! với hiệu ứng Scale & Fade
     /// - Nút điều khiển ảo Mobile: Trái, Phải, Nhảy
-    /// - Popup Game Over & Victory (Hiện điểm, xu, nút Chơi lại, nút Về Menu)
-    /// </summary>
     public class UIManager_Platformer : MonoBehaviour
     {
+        public static UIManager_Platformer Instance { get; private set; }
+
         [Header("--- Tham chiếu Đối tượng (References) ---")]
         [SerializeField] private PlayerController2D playerController;
         [SerializeField] private PlayerHealth playerHealth;
@@ -32,11 +32,15 @@ namespace PlatformerGame.UI
         [SerializeField] private Sprite emptyHeartSprite;
 
         [Header("--- HUD Coins & Score ---")]
+        [SerializeField] private RectTransform coinIconTransform;
         [SerializeField] private TMP_Text coinText;
+        [SerializeField] private RectTransform gemIconTransform;
+        [SerializeField] private TMP_Text gemText;
         [SerializeField] private TMP_Text scoreText;
 
         [Header("--- HUD Chìa Khóa & Thông báo Stage ---")]
         [SerializeField] private Image keyIconImage;
+        [SerializeField] private TMP_Text keyText;
         [SerializeField] private Sprite keyActiveSprite;
         [SerializeField] private Sprite keyInactiveSprite;
         [SerializeField] private GameObject bannerContainer;
@@ -70,6 +74,8 @@ namespace PlatformerGame.UI
 
         private void Awake()
         {
+            Instance = this;
+
             // Tự động tìm Player nếu chưa gán
             if (playerController == null) playerController = FindObjectOfType<PlayerController2D>();
             if (playerHealth == null) playerHealth = FindObjectOfType<PlayerHealth>();
@@ -124,11 +130,13 @@ namespace PlatformerGame.UI
             if (PlatformerGameManager.Instance != null)
             {
                 PlatformerGameManager.Instance.OnCoinChanged += UpdateCoinHUD;
+                PlatformerGameManager.Instance.OnGemChanged += UpdateGemHUD;
                 PlatformerGameManager.Instance.OnScoreChanged += UpdateScoreHUD;
                 PlatformerGameManager.Instance.OnStateChanged += HandleGameStateChanged;
                 PlatformerGameManager.Instance.OnCountdownTick += ShowCountdownTick;
 
                 UpdateCoinHUD(PlatformerGameManager.Instance.CoinsCollected);
+                UpdateGemHUD(PlatformerGameManager.Instance.GemsCollected);
                 UpdateScoreHUD(PlatformerGameManager.Instance.Score);
             }
 
@@ -159,6 +167,7 @@ namespace PlatformerGame.UI
             if (PlatformerGameManager.Instance != null)
             {
                 PlatformerGameManager.Instance.OnCoinChanged -= UpdateCoinHUD;
+                PlatformerGameManager.Instance.OnGemChanged -= UpdateGemHUD;
                 PlatformerGameManager.Instance.OnScoreChanged -= UpdateScoreHUD;
                 PlatformerGameManager.Instance.OnStateChanged -= HandleGameStateChanged;
                 PlatformerGameManager.Instance.OnCountdownTick -= ShowCountdownTick;
@@ -228,11 +237,135 @@ namespace PlatformerGame.UI
             }
         }
 
+        public void UpdateGemHUD(int gems)
+        {
+            if (gemText != null)
+            {
+                gemText.text = gems.ToString("D2");
+            }
+        }
+
         public void UpdateScoreHUD(int score)
         {
             if (scoreText != null)
             {
                 scoreText.text = $"SCORE: {score:N0}";
+            }
+        }
+
+        /// <summary>
+        /// Lấy tọa độ Screen Position của Icon Coin trên HUD để hiệu ứng bay Coin nhắm tới
+        /// </summary>
+        public Vector3 GetCoinIconScreenPosition()
+        {
+            if (coinIconTransform != null)
+            {
+                return coinIconTransform.position;
+            }
+            if (coinText != null)
+            {
+                return coinText.transform.position;
+            }
+            return new Vector3(Screen.width - 200f, Screen.height - 60f, 0f);
+        }
+
+        /// <summary>
+        /// Lấy tọa độ Screen Position của Icon Gem trên HUD để hiệu ứng bay Gem nhắm tới
+        /// </summary>
+        public Vector3 GetGemIconScreenPosition()
+        {
+            if (gemIconTransform != null)
+            {
+                return gemIconTransform.position;
+            }
+            if (gemText != null)
+            {
+                return gemText.transform.position;
+            }
+            return new Vector3(Screen.width - 60f, Screen.height - 60f, 0f);
+        }
+
+        /// <summary>
+        /// Hiệu ứng nảy biểu tượng Coin trên HUD khi đồng xu bay tới đích
+        /// </summary>
+        public void PunchCoinHUD()
+        {
+            StartCoroutine(PunchRoutine(coinIconTransform != null ? coinIconTransform : (coinText != null ? coinText.transform : null)));
+        }
+
+        /// <summary>
+        /// Hiệu ứng nảy biểu tượng Gem trên HUD khi kim cương bay tới đích
+        /// </summary>
+        public void PunchGemHUD()
+        {
+            StartCoroutine(PunchRoutine(gemIconTransform != null ? gemIconTransform : (gemText != null ? gemText.transform : null)));
+        }
+
+        private IEnumerator PunchRoutine(Transform target)
+        {
+            if (target == null) yield break;
+
+            Vector3 baseScale = Vector3.one;
+            float duration = 0.22f;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                float punch = Mathf.Sin(t * Mathf.PI) * 0.45f;
+                target.localScale = baseScale * (1f + punch);
+                yield return null;
+            }
+
+            target.localScale = baseScale;
+        }
+
+        /// <summary>
+        /// Tạo chữ nổi bay lên tại vị trí nhặt vật phẩm (+5, +10, etc.)
+        /// </summary>
+        public void SpawnFloatingScore(Vector3 worldPos, int amount, Color color)
+        {
+            StartCoroutine(FloatingScoreRoutine(worldPos, amount, color));
+        }
+
+        private IEnumerator FloatingScoreRoutine(Vector3 worldPos, int amount, Color color)
+        {
+            GameObject floatObj = new GameObject("FloatingScore");
+            floatObj.transform.position = worldPos + Vector3.up * 0.5f;
+
+            TextMeshPro tmp = floatObj.AddComponent<TextMeshPro>();
+            tmp.text = $"+{amount}";
+            tmp.fontSize = 6f;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.color = color;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.sortingOrder = 100;
+
+            float duration = 0.65f;
+            float elapsed = 0f;
+            Vector3 startPos = floatObj.transform.position;
+            Vector3 endPos = startPos + Vector3.up * 1.4f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+
+                if (floatObj != null)
+                {
+                    floatObj.transform.position = Vector3.Lerp(startPos, endPos, Mathf.Sin(t * Mathf.PI * 0.5f));
+                    Color c = color;
+                    c.a = Mathf.Lerp(1f, 0f, t * t);
+                    tmp.color = c;
+                    floatObj.transform.localScale = Vector3.one * Mathf.Lerp(1f, 1.3f, t);
+                }
+                yield return null;
+            }
+
+            if (floatObj != null)
+            {
+                Destroy(floatObj);
             }
         }
 
@@ -250,13 +383,27 @@ namespace PlatformerGame.UI
                 {
                     if (keyActiveSprite != null) keyIconImage.sprite = keyActiveSprite;
                     keyIconImage.color = Color.white;
-                    keyIconImage.transform.localScale = Vector3.one * 1.2f;
+                    keyIconImage.transform.localScale = Vector3.one * 1.15f;
                 }
                 else
                 {
                     if (keyInactiveSprite != null) keyIconImage.sprite = keyInactiveSprite;
-                    keyIconImage.color = new Color(0.3f, 0.3f, 0.3f, 0.4f);
+                    keyIconImage.color = Color.white; // 100% sắc nét rõ ràng
                     keyIconImage.transform.localScale = Vector3.one;
+                }
+            }
+
+            if (keyText != null)
+            {
+                if (hasKey)
+                {
+                    keyText.text = "1/1";
+                    keyText.color = new Color(1f, 0.92f, 0.35f, 1f); // Vibrant gold
+                }
+                else
+                {
+                    keyText.text = "0/1";
+                    keyText.color = new Color(0.9f, 0.9f, 0.95f, 0.75f); // Soft bright white/gray
                 }
             }
         }

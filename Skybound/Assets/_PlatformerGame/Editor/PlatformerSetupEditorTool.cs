@@ -39,6 +39,7 @@ namespace PlatformerGame.EditorTools
         private const string TILES_DIR = "Assets/_PlatformerGame/Tiles";
         private const string PALETTES_DIR = "Assets/_PlatformerGame/Palettes";
         private const string PALETTE_PREFAB_PATH = "Assets/_PlatformerGame/Palettes/Kenney_Platformer_Palette.prefab";
+        private const string PREFABS_DIR = "Assets/_PlatformerGame/Prefabs";
 
         private const string KENNEY_ROOT = "Assets/kenney_simplified-platformer-pack/PNG";
         private const string KENNEY_TILES_DIR = "Assets/kenney_simplified-platformer-pack/PNG/Tiles";
@@ -130,7 +131,104 @@ namespace PlatformerGame.EditorTools
             }
         }
 
-        [MenuItem("Tools/Platformer Game/Fix Brush & Activate Ground Painter (Sửa Cọ & Mở Bảng Vẽ Chuẩn)", false, 5)]
+        [MenuItem("Tools/Platformer Game/Update UI (Chỉ Scene Hiện Tại - Tuyệt Đối An Toàn)", false, 5)]
+        public static void UpdateCurrentSceneUIOnly()
+        {
+            try
+            {
+                var existingCanvas = GameObject.Find("UI_Canvas");
+                if (existingCanvas != null)
+                {
+                    Object.DestroyImmediate(existingCanvas);
+                }
+
+                var playerObj = GameObject.Find("Player_Character");
+                
+                string currentSceneName = EditorSceneManager.GetActiveScene().name;
+                int stageIndex = 1;
+                if (currentSceneName.Contains("Stage_") && int.TryParse(currentSceneName.Replace("Stage_", ""), out int idx))
+                {
+                    stageIndex = idx;
+                }
+
+                CreateCanvasWithHUD(playerObj, stageIndex);
+
+                var gm = Object.FindObjectOfType<PlatformerGameManager>();
+                if (gm != null && playerObj != null)
+                {
+                    SetPrivateField(gm, "player", playerObj.GetComponent<PlayerController2D>());
+                }
+
+                CreateEventSystem();
+
+                EditorUtility.DisplayDialog("Thành công!",
+                    "✅ Đã cập nhật xong UI HUD & Nút bấm mới cho Scene hiện tại!\n" +
+                    "🛡️ Giữ nguyên 100% tất cả các vật phẩm, coins, gạch decor bạn đang đặt.", "Tuyệt vời");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[UpdateUI] Lỗi: {ex.Message}");
+            }
+        }
+
+        [MenuItem("Tools/Platformer Game/Update All Stage UIs & Touch Controls (Nâng Cấp UI Cho Toàn Bộ 8 Stage)", false, 6)]
+        public static void UpdateAllStageScenesUI()
+        {
+            if (!EditorUtility.DisplayDialog("Xác nhận cập nhật 8 Stage",
+                "⚠️ Lệnh này sẽ mở lần lượt 8 file Scene từ Stage_1 đến Stage_8 để cập nhật UI Canvas.\n\n" +
+                "👉 Hãy đảm bảo bạn đã bấm Ctrl + S để lưu công việc hiện tại trước khi chạy!", "Tiếp tục", "Hủy"))
+            {
+                return;
+            }
+
+            try
+            {
+                string activeScenePath = EditorSceneManager.GetActiveScene().path;
+
+                for (int i = 1; i <= 8; i++)
+                {
+                    string scenePath = $"Assets/Scenes/Stage_{i}.unity";
+                    if (!System.IO.File.Exists(scenePath)) continue;
+
+                    var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+                    
+                    var existingCanvas = GameObject.Find("UI_Canvas");
+                    if (existingCanvas != null)
+                    {
+                        Object.DestroyImmediate(existingCanvas);
+                    }
+
+                    var playerObj = GameObject.Find("Player_Character");
+                    CreateCanvasWithHUD(playerObj, i);
+
+                    var gm = Object.FindObjectOfType<PlatformerGameManager>();
+                    if (gm != null && playerObj != null)
+                    {
+                        SetPrivateField(gm, "player", playerObj.GetComponent<PlayerController2D>());
+                    }
+
+                    CreateEventSystem();
+                    EditorSceneManager.SaveScene(scene);
+                }
+
+                if (!string.IsNullOrEmpty(activeScenePath) && System.IO.File.Exists(activeScenePath))
+                {
+                    EditorSceneManager.OpenScene(activeScenePath, OpenSceneMode.Single);
+                }
+
+                EditorUtility.DisplayDialog("Thành công!",
+                    "✅ Đã nâng cấp toàn bộ UI HUD và Nút bấm cảm ứng ảo cho tất cả 8 Stage!\n\n" +
+                    "- 💎 Icon Kim Cương Xanh Dương cho Scene 1.\n" +
+                    "- 🖼️ Khung HUD Key & Gem tách biệt sang trọng.\n" +
+                    "- 🎮 Nút cảm ứng Trái, Phải, Nhảy siêu nét, mượt mà!", "Tuyệt vời");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[UpdateUI] Lỗi: {ex.Message}");
+            }
+        }
+
+        [MenuItem("Tools/Platformer Game/Fix Brush & Activate Ground Painter (Sửa Cọ & Mở Bảng Vẽ Chuẩn)", false, 6)]
         public static void FixBrushAndActivatePainter()
         {
             try
@@ -194,6 +292,134 @@ namespace PlatformerGame.EditorTools
             {
                 Debug.LogError($"[FixBrush] Lỗi: {ex.Message}");
             }
+        }
+
+        [MenuItem("Tools/Platformer Game/Create All Item Prefabs (Tạo Thư Mục Prefabs Kim Cương, Tim, Chìa Khóa...)", false, 6)]
+        public static void CreateAllItemPrefabs()
+        {
+            EnsureDirectories();
+
+            Sprite coinGoldRound = LoadSprite("Assets/_PlatformerGame/ASSETS/coin_gold.png");
+            Sprite gemBlueSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item007.png");   // Xanh Dương (Blue Sapphire)
+            Sprite gemGreenSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item009.png");  // Xanh Lá (Green Emerald)
+            Sprite gemRedSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item010.png");    // Đỏ / Cam (Red Ruby)
+            Sprite gemYellowSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png"); // Vàng (Yellow Topaz)
+
+            // 1. Prefab Kim Cương Xanh Dương (Item_Gem_Blue & Item_Gem) - +5 Coins
+            GameObject gemBlueObj = new GameObject("Item_Gem_Blue");
+            var gbsr = gemBlueObj.AddComponent<SpriteRenderer>();
+            gbsr.sprite = gemBlueSprite ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item007.png");
+            gbsr.sortingOrder = 6;
+            var gbcol = gemBlueObj.AddComponent<CircleCollider2D>();
+            gbcol.radius = 0.4f;
+            gbcol.isTrigger = true;
+            var gbcomp = gemBlueObj.AddComponent<GemPickup>();
+            gbcomp.SetupGem(GemColorType.Blue_Sapphire, 5, false);
+            PrefabUtility.SaveAsPrefabAsset(gemBlueObj, $"{PREFABS_DIR}/Item_Gem_Blue.prefab");
+            PrefabUtility.SaveAsPrefabAsset(gemBlueObj, $"{PREFABS_DIR}/Item_Gem.prefab");
+            Object.DestroyImmediate(gemBlueObj);
+
+            // 2. Prefab Kim Cương Xanh Lá (Item_Gem_Green) - +10 Coins & Hồi +1 Tim Máu ❤️
+            GameObject gemGreenObj = new GameObject("Item_Gem_Green");
+            var ggsr = gemGreenObj.AddComponent<SpriteRenderer>();
+            ggsr.sprite = gemGreenSprite ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item009.png");
+            ggsr.sortingOrder = 6;
+            var ggcol = gemGreenObj.AddComponent<CircleCollider2D>();
+            ggcol.radius = 0.4f;
+            ggcol.isTrigger = true;
+            var ggcomp = gemGreenObj.AddComponent<GemPickup>();
+            ggcomp.SetupGem(GemColorType.Green_Emerald, 10, true);
+            PrefabUtility.SaveAsPrefabAsset(gemGreenObj, $"{PREFABS_DIR}/Item_Gem_Green.prefab");
+            Object.DestroyImmediate(gemGreenObj);
+
+            // 3. Prefab Kim Cương Đỏ (Item_Gem_Red) - +20 Coins
+            GameObject gemRedObj = new GameObject("Item_Gem_Red");
+            var grsr = gemRedObj.AddComponent<SpriteRenderer>();
+            grsr.sprite = gemRedSprite ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item010.png");
+            grsr.sortingOrder = 6;
+            var grcol = gemRedObj.AddComponent<CircleCollider2D>();
+            grcol.radius = 0.4f;
+            grcol.isTrigger = true;
+            var grcomp = gemRedObj.AddComponent<GemPickup>();
+            grcomp.SetupGem(GemColorType.Red_Ruby, 20, false);
+            PrefabUtility.SaveAsPrefabAsset(gemRedObj, $"{PREFABS_DIR}/Item_Gem_Red.prefab");
+            Object.DestroyImmediate(gemRedObj);
+
+            // 4. Prefab Kim Cương Vàng (Item_Gem_Yellow) - +5 Coins
+            GameObject gemYellowObj = new GameObject("Item_Gem_Yellow");
+            var gysr = gemYellowObj.AddComponent<SpriteRenderer>();
+            gysr.sprite = gemYellowSprite ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png");
+            gysr.sortingOrder = 6;
+            var gycol = gemYellowObj.AddComponent<CircleCollider2D>();
+            gycol.radius = 0.4f;
+            gycol.isTrigger = true;
+            var gycomp = gemYellowObj.AddComponent<GemPickup>();
+            gycomp.SetupGem(GemColorType.Yellow_Topaz, 5, false);
+            PrefabUtility.SaveAsPrefabAsset(gemYellowObj, $"{PREFABS_DIR}/Item_Gem_Yellow.prefab");
+            Object.DestroyImmediate(gemYellowObj);
+
+            // 5. Prefab Đồng Xu Vàng Tròn Mới (Item_Coin) - +1 Coin
+            GameObject coinObj = new GameObject("Item_Coin");
+            var coinSr = coinObj.AddComponent<SpriteRenderer>();
+            coinSr.sprite = coinGoldRound ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png");
+            coinSr.sortingOrder = 6;
+            var coinCol = coinObj.AddComponent<CircleCollider2D>();
+            coinCol.radius = 0.35f;
+            coinCol.isTrigger = true;
+            coinObj.AddComponent<CollectibleCoin>();
+            PrefabUtility.SaveAsPrefabAsset(coinObj, $"{PREFABS_DIR}/Item_Coin.prefab");
+            Object.DestroyImmediate(coinObj);
+
+            // 6. Prefab Tim hồi máu (Item_Heart)
+            GameObject heartObj = new GameObject("Item_Heart");
+            var heartSr = heartObj.AddComponent<SpriteRenderer>();
+            heartSr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item017.png");
+            heartSr.sortingOrder = 6;
+            var heartCol = heartObj.AddComponent<CircleCollider2D>();
+            heartCol.radius = 0.4f;
+            heartCol.isTrigger = true;
+            heartObj.AddComponent<HeartPickup>();
+            PrefabUtility.SaveAsPrefabAsset(heartObj, $"{PREFABS_DIR}/Item_Heart.prefab");
+            Object.DestroyImmediate(heartObj);
+
+            // 7. Prefab Chìa Khóa (Item_Key)
+            GameObject keyObj = new GameObject("Item_Key");
+            var keySr = keyObj.AddComponent<SpriteRenderer>();
+            keySr.sprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+            keySr.sortingOrder = 6;
+            var keyCol = keyObj.AddComponent<CircleCollider2D>();
+            keyCol.radius = 0.5f;
+            keyCol.isTrigger = true;
+            keyObj.AddComponent<KeyPickup>();
+            PrefabUtility.SaveAsPrefabAsset(keyObj, $"{PREFABS_DIR}/Item_Key.prefab");
+            Object.DestroyImmediate(keyObj);
+
+            // 8. Prefab Lò Xo (Item_Spring)
+            GameObject springObj = new GameObject("Item_Spring");
+            var springSr = springObj.AddComponent<SpriteRenderer>();
+            springSr.sprite = LoadSprite($"{KENNEY_TILES_DIR}/platformPack_tile046.png");
+            springSr.sortingOrder = 2;
+            var springCol = springObj.AddComponent<BoxCollider2D>();
+            springCol.size = new Vector2(0.8f, 0.6f);
+            springCol.isTrigger = true;
+            springObj.AddComponent<SpringPad>();
+            PrefabUtility.SaveAsPrefabAsset(springObj, $"{PREFABS_DIR}/Item_Spring.prefab");
+            Object.DestroyImmediate(springObj);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            EditorUtility.DisplayDialog("Thành công",
+                "✅ Đã tạo đầy đủ các Prefab trong thư mục:\nAssets/_PlatformerGame/Prefabs/\n\n" +
+                "💎 Item_Gem_Blue.prefab (+5 Xu, Kim cương Xanh Dương)\n" +
+                "🟢 Item_Gem_Green.prefab (+10 Xu & Hồi +1 Tim Máu ❤️)\n" +
+                "🔴 Item_Gem_Red.prefab (+20 Xu, Ruby Đỏ hiếm)\n" +
+                "🟡 Item_Gem_Yellow.prefab (+5 Xu, Topaz Vàng)\n" +
+                "🪙 Item_Coin.prefab (Đồng Tiền Vàng Tròn Mới dập sao)\n" +
+                "❤️ Item_Heart.prefab (Tim hồi máu)\n" +
+                "🔑 Item_Key.prefab (Chìa khóa qua màn)\n" +
+                "🌀 Item_Spring.prefab (Lò xo bật nhảy)\n\n" +
+                "👉 Sếp có thể kéo thả Prefab từ Project vào Scene hoặc Ctrl + D để nhân đôi tùy thích!", "Tuyệt vời");
         }
 
         [MenuItem("Tools/Platformer Game/Fix Tile Scaling (Khít 100% không hở viền - PPU 64)", false, 7)]
@@ -439,6 +665,9 @@ namespace PlatformerGame.EditorTools
 
             if (!AssetDatabase.IsValidFolder(PALETTES_DIR))
                 AssetDatabase.CreateFolder(ROOT_GAME_DIR, "Palettes");
+
+            if (!AssetDatabase.IsValidFolder(PREFABS_DIR))
+                AssetDatabase.CreateFolder(ROOT_GAME_DIR, "Prefabs");
         }
 
         private static void EnsureGroundLayer()
@@ -1141,7 +1370,7 @@ namespace PlatformerGame.EditorTools
             if (composite != null) composite.GenerateGeometry();
 
             // 8. Setup UI Canvas
-            CreateCanvasWithHUD(playerObj);
+            CreateCanvasWithHUD(playerObj, stageIndex);
 
             // 9. GameManager
             GameObject gmObj = new GameObject("[GameManager]");
@@ -1510,7 +1739,7 @@ namespace PlatformerGame.EditorTools
 
         #region UI Canvas & HUD Creation
 
-        private static GameObject CreateCanvasWithHUD(GameObject playerObj)
+        private static GameObject CreateCanvasWithHUD(GameObject playerObj, int stageIndex = 1)
         {
             GameObject canvasObj = new GameObject("UI_Canvas");
             Canvas canvas = canvasObj.AddComponent<Canvas>();
@@ -1526,7 +1755,20 @@ namespace PlatformerGame.EditorTools
 
             Sprite fullHeartSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item017.png");
             Sprite emptyHeartSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item018.png");
-            Sprite coinIconSprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png");
+            Sprite keySprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+            Sprite hudBadgeBg = LoadSprite("Assets/_PlatformerGame/ASSETS/hud_badge_bg.png");
+            Sprite btnLeftSprite = LoadSprite("Assets/_PlatformerGame/ASSETS/btn_touch_left.png");
+            Sprite btnRightSprite = LoadSprite("Assets/_PlatformerGame/ASSETS/btn_touch_right.png");
+            Sprite btnJumpSprite = LoadSprite("Assets/_PlatformerGame/ASSETS/btn_touch_jump.png");
+
+            // Kim Cương / Coin Icon cho HUD: Vòng Scene 1 chuyển sang kim cương xanh dương theo yêu cầu
+            Sprite gemHudSprite = (stageIndex == 1)
+                ? (LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item007.png") ?? LoadSprite("Assets/_PlatformerGame/ASSETS/coin_gold.png"))
+                : (LoadSprite("Assets/_PlatformerGame/ASSETS/coin_gold.png") ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png"));
+
+            TMP_FontAsset gameFont = GetOrCreateGameFontAsset();
+            Material btnMat = GetOrCreateButtonMaterial(gameFont);
+            Material titleMat = GetOrCreateTitleMaterial(gameFont);
 
             // 1. HUD Container (Top Bar)
             GameObject hudPanel = CreateUIElement("HUD_Panel", canvasObj.transform);
@@ -1563,40 +1805,6 @@ namespace PlatformerGame.EditorTools
                 heartImages.Add(heartImg);
             }
 
-            // --- Coins Counter (Top Right) ---
-            GameObject coinContainer = CreateUIElement("Coin_Container", hudPanel.transform);
-            RectTransform coinRect = coinContainer.GetComponent<RectTransform>();
-            coinRect.anchorMin = new Vector2(1, 0.5f);
-            coinRect.anchorMax = new Vector2(1, 0.5f);
-            coinRect.pivot = new Vector2(1, 0.5f);
-            coinRect.anchoredPosition = new Vector2(-30, 0);
-            coinRect.sizeDelta = new Vector2(200, 60);
-
-            // Coin Icon
-            GameObject coinIconObj = CreateUIElement("Coin_Icon", coinContainer.transform);
-            RectTransform coinIconRect = coinIconObj.GetComponent<RectTransform>();
-            coinIconRect.sizeDelta = new Vector2(50, 50);
-            Image coinIconImg = coinIconObj.AddComponent<Image>();
-            coinIconImg.sprite = coinIconSprite;
-            coinIconImg.preserveAspect = true;
-
-            TMP_FontAsset gameFont = GetOrCreateGameFontAsset();
-            Material btnMat = GetOrCreateButtonMaterial(gameFont);
-            Material titleMat = GetOrCreateTitleMaterial(gameFont);
-
-            // Coin Text
-            GameObject coinTextObj = CreateUIElement("Coin_Text", coinContainer.transform);
-            RectTransform coinTextRect = coinTextObj.GetComponent<RectTransform>();
-            coinTextRect.sizeDelta = new Vector2(120, 60);
-            TextMeshProUGUI coinTmp = coinTextObj.AddComponent<TextMeshProUGUI>();
-            if (gameFont != null) coinTmp.font = gameFont;
-            if (btnMat != null) coinTmp.fontSharedMaterial = btnMat;
-            coinTmp.text = "00";
-            coinTmp.fontSize = 42;
-            coinTmp.fontStyle = FontStyles.Bold;
-            coinTmp.color = new Color(1f, 0.9f, 0.2f);
-            coinTmp.alignment = TextAlignmentOptions.MidlineLeft;
-
             // --- Score Text (Top Center) ---
             GameObject scoreObj = CreateUIElement("Score_Text", hudPanel.transform);
             RectTransform scoreRect = scoreObj.GetComponent<RectTransform>();
@@ -1615,20 +1823,141 @@ namespace PlatformerGame.EditorTools
             scoreTmp.color = Color.white;
             scoreTmp.alignment = TextAlignmentOptions.Center;
 
-            // --- Key HUD (Top Right, next to Coins) ---
-            GameObject keyContainer = CreateUIElement("Key_Container", hudPanel.transform);
-            RectTransform keyRect = keyContainer.GetComponent<RectTransform>();
-            keyRect.anchorMin = new Vector2(1, 0.5f);
-            keyRect.anchorMax = new Vector2(1, 0.5f);
-            keyRect.pivot = new Vector2(1, 0.5f);
-            keyRect.anchoredPosition = new Vector2(-250, 0);
-            keyRect.sizeDelta = new Vector2(50, 50);
+            // --- 1. Gem Badge (Top Right, góc ngoài cùng bên phải) ---
+            GameObject gemBadgeObj = CreateUIElement("Gem_Badge", hudPanel.transform);
+            RectTransform gemBadgeRect = gemBadgeObj.GetComponent<RectTransform>();
+            gemBadgeRect.anchorMin = new Vector2(1, 0.5f);
+            gemBadgeRect.anchorMax = new Vector2(1, 0.5f);
+            gemBadgeRect.pivot = new Vector2(1, 0.5f);
+            gemBadgeRect.anchoredPosition = new Vector2(-30, 0);
+            gemBadgeRect.sizeDelta = new Vector2(160, 58);
 
-            Image keyIconImg = keyContainer.AddComponent<Image>();
-            Sprite keySprite = LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item014.png");
+            if (hudBadgeBg != null)
+            {
+                Image bg = gemBadgeObj.AddComponent<Image>();
+                bg.sprite = hudBadgeBg;
+                bg.color = Color.white;
+            }
+
+            // Gem Icon inside Badge
+            GameObject gemIconObj = CreateUIElement("Gem_Icon", gemBadgeObj.transform);
+            RectTransform gemIconRect = gemIconObj.GetComponent<RectTransform>();
+            gemIconRect.anchorMin = new Vector2(0, 0.5f);
+            gemIconRect.anchorMax = new Vector2(0, 0.5f);
+            gemIconRect.pivot = new Vector2(0.5f, 0.5f);
+            gemIconRect.anchoredPosition = new Vector2(32, 0);
+            gemIconRect.sizeDelta = new Vector2(40, 40);
+            Image gemIconImg = gemIconObj.AddComponent<Image>();
+            gemIconImg.sprite = gemHudSprite;
+            gemIconImg.preserveAspect = true;
+
+            // Gem Text inside Badge
+            GameObject gemTextObj = CreateUIElement("Gem_Text", gemBadgeObj.transform);
+            RectTransform gemTextRect = gemTextObj.GetComponent<RectTransform>();
+            gemTextRect.anchorMin = new Vector2(0, 0);
+            gemTextRect.anchorMax = new Vector2(1, 1);
+            gemTextRect.pivot = new Vector2(0.5f, 0.5f);
+            gemTextRect.offsetMin = new Vector2(58, 0);
+            gemTextRect.offsetMax = new Vector2(-10, 0);
+            TextMeshProUGUI gemTmp = gemTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) gemTmp.font = gameFont;
+            if (btnMat != null) gemTmp.fontSharedMaterial = btnMat;
+            gemTmp.text = "00";
+            gemTmp.fontSize = 32;
+            gemTmp.fontStyle = FontStyles.Bold;
+            gemTmp.color = new Color(0.92f, 0.98f, 1f); // Bright ice blue
+            gemTmp.alignment = TextAlignmentOptions.MidlineLeft;
+
+            // --- 2. Coin Badge (Top Right, ở giữa Gem và Key) ---
+            GameObject coinBadgeObj = CreateUIElement("Coin_Badge", hudPanel.transform);
+            RectTransform coinBadgeRect = coinBadgeObj.GetComponent<RectTransform>();
+            coinBadgeRect.anchorMin = new Vector2(1, 0.5f);
+            coinBadgeRect.anchorMax = new Vector2(1, 0.5f);
+            coinBadgeRect.pivot = new Vector2(1, 0.5f);
+            coinBadgeRect.anchoredPosition = new Vector2(-210, 0);
+            coinBadgeRect.sizeDelta = new Vector2(160, 58);
+
+            if (hudBadgeBg != null)
+            {
+                Image bg = coinBadgeObj.AddComponent<Image>();
+                bg.sprite = hudBadgeBg;
+                bg.color = Color.white;
+            }
+
+            // Coin Icon inside Badge
+            GameObject coinIconObj = CreateUIElement("Coin_Icon", coinBadgeObj.transform);
+            RectTransform coinIconRect = coinIconObj.GetComponent<RectTransform>();
+            coinIconRect.anchorMin = new Vector2(0, 0.5f);
+            coinIconRect.anchorMax = new Vector2(0, 0.5f);
+            coinIconRect.pivot = new Vector2(0.5f, 0.5f);
+            coinIconRect.anchoredPosition = new Vector2(32, 0);
+            coinIconRect.sizeDelta = new Vector2(40, 40);
+            Image coinIconImg = coinIconObj.AddComponent<Image>();
+            coinIconImg.sprite = LoadSprite("Assets/_PlatformerGame/ASSETS/coin_gold.png") ?? LoadSprite($"{KENNEY_ITEMS_DIR}/platformPack_item008.png");
+            coinIconImg.preserveAspect = true;
+
+            // Coin Text inside Badge
+            GameObject coinTextObj = CreateUIElement("Coin_Text", coinBadgeObj.transform);
+            RectTransform coinTextRect = coinTextObj.GetComponent<RectTransform>();
+            coinTextRect.anchorMin = new Vector2(0, 0);
+            coinTextRect.anchorMax = new Vector2(1, 1);
+            coinTextRect.pivot = new Vector2(0.5f, 0.5f);
+            coinTextRect.offsetMin = new Vector2(58, 0);
+            coinTextRect.offsetMax = new Vector2(-10, 0);
+            TextMeshProUGUI coinTmp = coinTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) coinTmp.font = gameFont;
+            if (btnMat != null) coinTmp.fontSharedMaterial = btnMat;
+            coinTmp.text = "00";
+            coinTmp.fontSize = 32;
+            coinTmp.fontStyle = FontStyles.Bold;
+            coinTmp.color = new Color(1f, 0.92f, 0.45f); // Vivid bright gold
+            coinTmp.alignment = TextAlignmentOptions.MidlineLeft;
+
+            // --- 3. Key Badge (Top Right, bên trái Coin Badge) ---
+            GameObject keyBadgeObj = CreateUIElement("Key_Badge", hudPanel.transform);
+            RectTransform keyBadgeRect = keyBadgeObj.GetComponent<RectTransform>();
+            keyBadgeRect.anchorMin = new Vector2(1, 0.5f);
+            keyBadgeRect.anchorMax = new Vector2(1, 0.5f);
+            keyBadgeRect.pivot = new Vector2(1, 0.5f);
+            keyBadgeRect.anchoredPosition = new Vector2(-390, 0);
+            keyBadgeRect.sizeDelta = new Vector2(150, 58);
+
+            if (hudBadgeBg != null)
+            {
+                Image bg = keyBadgeObj.AddComponent<Image>();
+                bg.sprite = hudBadgeBg;
+                bg.color = Color.white;
+            }
+
+            // Key Icon
+            GameObject keyIconObj = CreateUIElement("Key_Icon", keyBadgeObj.transform);
+            RectTransform keyIconRect = keyIconObj.GetComponent<RectTransform>();
+            keyIconRect.anchorMin = new Vector2(0, 0.5f);
+            keyIconRect.anchorMax = new Vector2(0, 0.5f);
+            keyIconRect.pivot = new Vector2(0.5f, 0.5f);
+            keyIconRect.anchoredPosition = new Vector2(30, 0);
+            keyIconRect.sizeDelta = new Vector2(38, 38);
+            Image keyIconImg = keyIconObj.AddComponent<Image>();
             keyIconImg.sprite = keySprite;
             keyIconImg.preserveAspect = true;
-            keyIconImg.color = new Color(0.3f, 0.3f, 0.3f, 0.4f); // Inactive dark initially
+            keyIconImg.color = Color.white; // 100% sắc nét rõ ràng
+
+            // Key Text
+            GameObject keyTextObj = CreateUIElement("Key_Text", keyBadgeObj.transform);
+            RectTransform keyTextRect = keyTextObj.GetComponent<RectTransform>();
+            keyTextRect.anchorMin = new Vector2(0, 0);
+            keyTextRect.anchorMax = new Vector2(1, 1);
+            keyTextRect.pivot = new Vector2(0.5f, 0.5f);
+            keyTextRect.offsetMin = new Vector2(56, 0);
+            keyTextRect.offsetMax = new Vector2(-10, 0);
+            TextMeshProUGUI keyTmp = keyTextObj.AddComponent<TextMeshProUGUI>();
+            if (gameFont != null) keyTmp.font = gameFont;
+            if (btnMat != null) keyTmp.fontSharedMaterial = btnMat;
+            keyTmp.text = "0/1";
+            keyTmp.fontSize = 28;
+            keyTmp.fontStyle = FontStyles.Bold;
+            keyTmp.color = new Color(0.92f, 0.94f, 0.98f, 0.85f);
+            keyTmp.alignment = TextAlignmentOptions.MidlineLeft;
 
             // --- Stage Name / Notification Banner (Top Center) ---
             GameObject bannerObj = CreateUIElement("Stage_Banner", canvasObj.transform);
@@ -1650,7 +1979,7 @@ namespace PlatformerGame.EditorTools
             TextMeshProUGUI bannerTmp = bannerTextObj.AddComponent<TextMeshProUGUI>();
             if (gameFont != null) bannerTmp.font = gameFont;
             if (btnMat != null) bannerTmp.fontSharedMaterial = btnMat;
-            bannerTmp.text = "🚩 STAGE 1: THUNG LŨNG CỎ XANH";
+            bannerTmp.text = $"🚩 STAGE {stageIndex}: KHÁM PHÁ THẾ GIỚI";
             bannerTmp.fontSize = 28;
             bannerTmp.fontStyle = FontStyles.Bold;
             bannerTmp.color = new Color(1f, 0.9f, 0.2f);
@@ -1675,7 +2004,7 @@ namespace PlatformerGame.EditorTools
             countdownTmp.color = new Color(1f, 0.9f, 0.1f);
             countdownTmp.alignment = TextAlignmentOptions.Center;
 
-            // 3. Mobile Virtual Controls
+            // 3. Mobile Virtual Controls (Sử dụng Sprite Nút Bấm Xịn)
             GameObject mobileControls = CreateUIElement("Mobile_Controls", canvasObj.transform);
             RectTransform mcRect = mobileControls.GetComponent<RectTransform>();
             mcRect.anchorMin = Vector2.zero;
@@ -1688,29 +2017,46 @@ namespace PlatformerGame.EditorTools
             lrRect.anchorMin = new Vector2(0, 0);
             lrRect.anchorMax = new Vector2(0, 0);
             lrRect.pivot = new Vector2(0, 0);
-            lrRect.anchoredPosition = new Vector2(60, 60);
-            lrRect.sizeDelta = new Vector2(320, 130);
+            lrRect.anchoredPosition = new Vector2(50, 50);
+            lrRect.sizeDelta = new Vector2(280, 120);
 
             HorizontalLayoutGroup lrLayout = leftRightGroup.AddComponent<HorizontalLayoutGroup>();
-            lrLayout.spacing = 30;
+            lrLayout.spacing = 25;
             lrLayout.childControlWidth = false;
             lrLayout.childControlHeight = false;
 
             // Button Left
-            GameObject btnLeft = CreateUIButton("Btn_Left", leftRightGroup.transform, "◀", new Vector2(130, 130), new Color(0.2f, 0.2f, 0.2f, 0.7f), 60);
+            GameObject btnLeft = CreateUIElement("Btn_Left", leftRightGroup.transform);
+            RectTransform blRect = btnLeft.GetComponent<RectTransform>();
+            blRect.sizeDelta = new Vector2(120, 120);
+            Image blImg = btnLeft.AddComponent<Image>();
+            blImg.sprite = btnLeftSprite;
+            blImg.preserveAspect = true;
+            blImg.color = Color.white;
             MobileTouchButton mtbLeft = btnLeft.AddComponent<MobileTouchButton>();
 
             // Button Right
-            GameObject btnRight = CreateUIButton("Btn_Right", leftRightGroup.transform, "▶", new Vector2(130, 130), new Color(0.2f, 0.2f, 0.2f, 0.7f), 60);
+            GameObject btnRight = CreateUIElement("Btn_Right", leftRightGroup.transform);
+            RectTransform brRect = btnRight.GetComponent<RectTransform>();
+            brRect.sizeDelta = new Vector2(120, 120);
+            Image brImg = btnRight.AddComponent<Image>();
+            brImg.sprite = btnRightSprite;
+            brImg.preserveAspect = true;
+            brImg.color = Color.white;
             MobileTouchButton mtbRight = btnRight.AddComponent<MobileTouchButton>();
 
             // Jump Button (Bottom Right)
-            GameObject btnJump = CreateUIButton("Btn_Jump", mobileControls.transform, "JUMP\n⬆", new Vector2(150, 150), new Color(0.15f, 0.6f, 0.25f, 0.85f), 34);
+            GameObject btnJump = CreateUIElement("Btn_Jump", mobileControls.transform);
             RectTransform jumpRect = btnJump.GetComponent<RectTransform>();
             jumpRect.anchorMin = new Vector2(1, 0);
             jumpRect.anchorMax = new Vector2(1, 0);
             jumpRect.pivot = new Vector2(1, 0);
-            jumpRect.anchoredPosition = new Vector2(-60, 60);
+            jumpRect.anchoredPosition = new Vector2(-50, 50);
+            jumpRect.sizeDelta = new Vector2(140, 140);
+            Image jumpImg = btnJump.AddComponent<Image>();
+            jumpImg.sprite = btnJumpSprite;
+            jumpImg.preserveAspect = true;
+            jumpImg.color = Color.white;
             MobileTouchButton mtbJump = btnJump.AddComponent<MobileTouchButton>();
 
             // 4. Game Over Popup
@@ -1722,14 +2068,21 @@ namespace PlatformerGame.EditorTools
             victoryModal.SetActive(false);
 
             // Auto-wire references to UIManager_Platformer
-            SetPrivateField(uiManager, "playerController", playerObj.GetComponent<PlayerController2D>());
-            SetPrivateField(uiManager, "playerHealth", playerObj.GetComponent<PlayerHealth>());
+            if (playerObj != null)
+            {
+                SetPrivateField(uiManager, "playerController", playerObj.GetComponent<PlayerController2D>());
+                SetPrivateField(uiManager, "playerHealth", playerObj.GetComponent<PlayerHealth>());
+            }
             SetPrivateField(uiManager, "heartImages", heartImages);
             SetPrivateField(uiManager, "fullHeartSprite", fullHeartSprite);
             SetPrivateField(uiManager, "emptyHeartSprite", emptyHeartSprite);
+            SetPrivateField(uiManager, "coinIconTransform", coinIconRect);
             SetPrivateField(uiManager, "coinText", coinTmp);
+            SetPrivateField(uiManager, "gemIconTransform", gemIconRect);
+            SetPrivateField(uiManager, "gemText", gemTmp);
             SetPrivateField(uiManager, "scoreText", scoreTmp);
             SetPrivateField(uiManager, "keyIconImage", keyIconImg);
+            SetPrivateField(uiManager, "keyText", keyTmp);
             SetPrivateField(uiManager, "keyActiveSprite", keySprite);
             SetPrivateField(uiManager, "keyInactiveSprite", keySprite);
             SetPrivateField(uiManager, "bannerContainer", bannerObj);
