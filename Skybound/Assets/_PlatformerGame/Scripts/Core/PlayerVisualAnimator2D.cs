@@ -82,8 +82,20 @@ namespace PlatformerGame.Core
             UpdateScaleRecovery();
         }
 
+        private bool isCelebrating = false;
+        private Coroutine celebrationCoroutine;
+
         private void UpdateAnimationState()
         {
+            if (isCelebrating)
+            {
+                if (spriteRenderer != null && happySprite != null)
+                {
+                    spriteRenderer.sprite = happySprite;
+                }
+                return;
+            }
+
             if (spriteRenderer == null || controller == null) return;
 
             bool isGrounded = controller.IsGrounded;
@@ -156,6 +168,42 @@ namespace PlatformerGame.Core
             walk2Sprite = walk2;
             jumpSprite = jump;
             happySprite = happy;
+        }
+
+        /// <summary>
+        /// Kích hoạt hiệu ứng ăn mừng chiến thắng: Đổi mặt cười vui sướng và nhảy tung tăng liên tục
+        /// </summary>
+        public void PlayVictoryCelebration()
+        {
+            isCelebrating = true;
+            if (spriteRenderer != null && happySprite != null)
+            {
+                spriteRenderer.sprite = happySprite;
+            }
+
+            if (celebrationCoroutine != null) StopCoroutine(celebrationCoroutine);
+            celebrationCoroutine = StartCoroutine(VictoryJumpRoutine());
+        }
+
+        private System.Collections.IEnumerator VictoryJumpRoutine()
+        {
+            while (true)
+            {
+                if (rb != null)
+                {
+                    currentVisualScale = new Vector3(0.85f, 1.3f, 1f);
+#if UNITY_6000_0_OR_NEWER
+                    rb.linearVelocity = new Vector2(0f, 9.5f);
+#else
+                    rb.velocity = new Vector2(0f, 9.5f);
+#endif
+                }
+                if (spriteRenderer != null && happySprite != null)
+                {
+                    spriteRenderer.sprite = happySprite;
+                }
+                yield return new WaitForSeconds(0.65f);
+            }
         }
     }
 }

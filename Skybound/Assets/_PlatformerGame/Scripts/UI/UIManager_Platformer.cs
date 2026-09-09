@@ -550,6 +550,12 @@ namespace PlatformerGame.UI
                 if (victoryCoinText != null && PlatformerGameManager.Instance != null)
                     victoryCoinText.text = $"COINS: {PlatformerGameManager.Instance.CoinsCollected}";
             }
+
+            var anim = (playerController != null) ? playerController.GetComponent<PlayerVisualAnimator2D>() : FindObjectOfType<PlayerVisualAnimator2D>();
+            if (anim != null)
+            {
+                anim.PlayVictoryCelebration();
+            }
         }
 
         private void OnRestartClicked()

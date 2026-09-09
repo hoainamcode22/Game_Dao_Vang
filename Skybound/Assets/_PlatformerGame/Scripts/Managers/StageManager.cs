@@ -15,22 +15,19 @@ namespace PlatformerGame.Managers
         public static StageManager Instance { get; private set; }
 
         [Header("--- Tiến trình Màn chơi ---")]
-        [Tooltip("Stage hiện tại (1 đến 8)")]
+        [Tooltip("Stage hiện tại (1 đến 5)")]
         [SerializeField] private int currentStageIndex = 1;
         [Tooltip("Đã nhặt chìa khóa của màn hiện tại chưa")]
         [SerializeField] private bool hasKey = false;
 
-        [Header("--- Danh sách Tên 8 Màn Chơi ---")]
+        [Header("--- Danh sách Tên 5 Màn Chơi ---")]
         [SerializeField] private string[] stageNames = new string[]
         {
             "Stage 1: Thung Lũng Cỏ Xanh",
-            "Stage 2: Hang Đất Nâu & Bục Gỗ",
-            "Stage 3: Thung Lũng Lò Xo",
-            "Stage 4: Hẻm Núi Chông Gai",
-            "Stage 5: Đỉnh Mây Trời",
-            "Stage 6: Hầm Ngục Cưa Xoay",
-            "Stage 7: Mê Cung Ống Nước",
-            "Stage 8: Pháo Đài Tối Thượng"
+            "Stage 2: Sa Mạc Cát Vàng",
+            "Stage 3: Biển Nâu Đỏ",
+            "Stage 4: Vùng Đất Băng Tuyết",
+            "Stage 5: Nhà Máy Bánh Răng"
         };
 
         // Events
@@ -112,11 +109,11 @@ namespace PlatformerGame.Managers
         }
 
         /// <summary>
-        /// Kích hoạt chiến thắng toàn bộ 8 màn chơi
+        /// Kích hoạt chiến thắng toàn bộ 5 màn chơi
         /// </summary>
         public void TriggerVictory()
         {
-            ShowMessage("🏆 CHÚC MỪNG! BẠN ĐÃ PHÁ ĐẢO TOÀN BỘ 8 MÀN CHƠI!");
+            ShowMessage("🏆 CHÚC MỪNG! BẠN ĐÃ PHÁ ĐẢO TRÒ CHƠI!");
             if (PlatformerGameManager.Instance != null)
             {
                 PlatformerGameManager.Instance.TriggerVictory();

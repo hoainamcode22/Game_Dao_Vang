@@ -58,9 +58,18 @@ namespace PlatformerGame.Gameplay
             isOpen = true;
             UpdateDoorVisual();
 
-            if (isFinalVictoryDoor || stageIndex >= 8)
+            if (isFinalVictoryDoor || nextSceneName == "Scene_Victory" || stageIndex >= 3)
             {
-                if (StageManager.Instance != null)
+                if (!string.IsNullOrEmpty(nextSceneName))
+                {
+                    UnityEngine.SceneManagement.SceneManager.LoadScene(nextSceneName);
+                }
+                else if (UnityEngine.SceneManagement.SceneUtility.GetBuildIndexByScenePath("Assets/Scenes/Scene_Victory.unity") >= 0 ||
+                         UnityEngine.SceneManagement.SceneUtility.GetBuildIndexByScenePath("Scene_Victory") >= 0)
+                {
+                    UnityEngine.SceneManagement.SceneManager.LoadScene("Scene_Victory");
+                }
+                else if (StageManager.Instance != null)
                 {
                     StageManager.Instance.TriggerVictory();
                 }

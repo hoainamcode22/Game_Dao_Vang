@@ -6,18 +6,27 @@ namespace PlatformerGame.UI
 {
     /// <summary>
     /// Điều khiển màn hình Menu chính (Scene_Home):
-    /// - Nút Play Adventure: Bắt đầu vào màn chơi phiêu lưu
+    /// - Nút Play Adventure: Bắt đầu vào màn chơi phiêu lưu (Stage_1)
+    /// - Nút Chọn Màn: Vào màn chơi
+    /// - Nút Audio: Bật/Tắt âm thanh
     /// - Nút Quit: Thoát game
     /// </summary>
     public class HomeSceneController : MonoBehaviour
     {
         [Header("--- Scene Configuration ---")]
         [Tooltip("Tên scene gameplay")]
-        [SerializeField] private string adventureSceneName = "Scene_Adventure";
+        [SerializeField] private string adventureSceneName = "Stage_1";
 
         [Header("--- UI Buttons ---")]
         [SerializeField] private Button playButton;
+        [SerializeField] private Button selectStageButton;
         [SerializeField] private Button quitButton;
+        [SerializeField] private Button audioButton;
+
+        [Header("--- Audio Toggle ---")]
+        [SerializeField] private Image audioIconImage;
+
+        private bool isAudioMuted = false;
 
         private void Awake()
         {
@@ -28,9 +37,19 @@ namespace PlatformerGame.UI
                 playButton.onClick.AddListener(OnPlayClicked);
             }
 
+            if (selectStageButton != null)
+            {
+                selectStageButton.onClick.AddListener(OnPlayClicked);
+            }
+
             if (quitButton != null)
             {
                 quitButton.onClick.AddListener(OnQuitClicked);
+            }
+
+            if (audioButton != null)
+            {
+                audioButton.onClick.AddListener(OnAudioToggleClicked);
             }
         }
 
@@ -56,6 +75,16 @@ namespace PlatformerGame.UI
         {
             Time.timeScale = 1f;
             SceneManager.LoadScene(adventureSceneName);
+        }
+
+        public void OnAudioToggleClicked()
+        {
+            isAudioMuted = !isAudioMuted;
+            AudioListener.pause = isAudioMuted;
+            if (audioIconImage != null)
+            {
+                audioIconImage.color = isAudioMuted ? new Color(1f, 0.4f, 0.4f, 0.6f) : Color.white;
+            }
         }
 
         public void OnQuitClicked()
